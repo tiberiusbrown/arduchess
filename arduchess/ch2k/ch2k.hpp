@@ -1,0 +1,2823 @@
+#pragma once
+
+#include <stdint.h>
+
+#ifndef CH2K_NAMESPACE
+#define CH2K_NAMESPACE ch2k
+#endif
+
+#ifndef CH2K_TUNABLE_EVAL
+#define CH2K_TUNABLE_EVAL 0
+#endif
+
+#ifndef CH2K_USE_STD_ARRAY
+#define CH2K_USE_STD_ARRAY 0
+#endif
+
+#ifndef CH2K_MAX_MOVE_STACK
+#define CH2K_MAX_MOVE_STACK 0
+#endif
+
+#if CH2K_USE_STD_ARRAY
+#include <array>
+#endif
+
+#ifndef CH2K_PRINTF
+#ifdef _MSC_VER
+#include <stdio.h>
+#define CH2K_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define CH2K_PRINTF(...)
+#endif
+#endif
+
+#ifndef CH2K_ASSERT
+#if defined(_MSC_VER) && !defined(NDEBUG)
+#define CH2K_ASSERT(cond__) do if(!(cond__)) __debugbreak(); while(0)
+#else
+#define CH2K_ASSERT(cond__) ((void)0)
+#endif
+#endif
+
+namespace CH2K_NAMESPACE
+{
+
+#ifndef CH2K_ARDUINO
+#undef PROGMEM
+#define PROGMEM
+static inline constexpr uint8_t pgm_read_byte(void const* x) { return *(uint8_t*)x; }
+static inline constexpr uint16_t pgm_read_word(void const* x) { return *(uint16_t*)x; }
+#endif
+
+template<class T> T tmin(T a, T b)
+{
+    return a < b ? a : b;
+}
+template<class T> T tmax(T a, T b)
+{
+    return a < b ? b : a;
+}
+template<class T> T tabs(T a)
+{
+    return a < T(0) ? -a : a;
+}
+
+template<class T> void swap(T& a, T& b)
+{
+    T t = a;
+    a = b;
+    b = t;
+}
+
+using size_t = uint16_t;
+
+using u8 = uint8_t;
+using s8 = int8_t;
+
+using u16 = uint16_t;
+using s16 = int16_t;
+
+// 32 bytes for the board: each piece is a nibble
+// piece types:
+//     0 nothing
+//     1 rook (can castle)
+//     2 pawn
+//     3 knight
+//     4 bishop
+//     5 rook
+//     6 queen
+//     7 king
+enum { GD__, GD_C, GD_P, GD_N, GD_B, GD_R, GD_Q, GD_K };
+enum
+{
+    GD___ = GD__,
+    GD__B = GD__ + 0x8, // indicates that it's black to move
+    GD_WC = GD_C,
+    GD_WP = GD_P,
+    GD_WN = GD_N,
+    GD_WB = GD_B,
+    GD_WR = GD_R,
+    GD_WQ = GD_Q,
+    GD_WK = GD_K,
+    GD_BC = GD_C + 0x8,
+    GD_BP = GD_P + 0x8,
+    GD_BN = GD_N + 0x8,
+    GD_BB = GD_B + 0x8,
+    GD_BR = GD_R + 0x8,
+    GD_BQ = GD_Q + 0x8,
+    GD_BK = GD_K + 0x8,
+};
+static inline constexpr u8 nibs(u8 a, u8 b)
+{
+    return (a << 4) + b;
+}
+
+static constexpr u8 const NEW_GAME_DATA[] PROGMEM =
+{
+    nibs(GD_BC, GD_BN), nibs(GD_BB, GD_BQ), nibs(GD_BK, GD_BB), nibs(GD_BN, GD_BC),
+    nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP),
+    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
+    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
+    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
+    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
+    nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP),
+    nibs(GD_WC, GD_WN), nibs(GD_WB, GD_WQ), nibs(GD_WK, GD_WB), nibs(GD_WN, GD_WC),
+};
+
+static constexpr u8 const PVALS[] PROGMEM =
+{
+    0, 1, 1, 3, 3, 5, 9, 0,
+};
+
+#if CH2K_TUNABLE_EVAL
+using score = double;
+using u8score = double;
+#else
+using score = s16;
+using u8score = u8;
+#endif
+static constexpr score const SCORE_LOSS = score(-32000);
+static constexpr score const SCORE_WIN  = score(32000);
+static constexpr score const SCORE_DRAW = score(0);
+
+struct eval_settings
+{
+    score pawn[32];
+    score knight[32];
+    score sliders[3][32];
+    score king[32];
+    score connected_pawn[4];
+    score knight_outpost[4];
+    score rook_on_open_file[4];
+    score rook_on_semi_open_file[4];
+    score passed_pawn[4];
+    score connected_passed_pawn[4];
+    score sliders_align_to_king[3];
+    score bishop_pair;
+    score rook_pawn_bonus[16];
+    score knight_pawn_bonus[16];
+    score tempo;
+    score knight_pair;
+    score rook_pair;
+    score king_vmob[13];
+};
+
+struct eval_piece_tables
+{
+    score t[6][32];
+};
+
+union eval_settings_union
+{
+    score data[sizeof(eval_settings) / sizeof(score)];
+    eval_settings v;
+    eval_piece_tables pt;
+};
+
+// 0.061181
+static eval_settings_union const DEFAULT_EVAL_SETTINGS PROGMEM =
+{
+    {
+          +0,   +0,   +0,   +0,
+        +220, +219, +208, +207,
+        +134, +143, +135, +133,
+         +84,  +88,  +85,  +86,
+         +66,  +71,  +72,  +79,
+         +62,  +69,  +69,  +66,
+         +65,  +78,  +76,  +58,
+          +0,   +0,   +0,   +0,
+        +190, +235, +249, +261,
+        +245, +266, +288, +285,
+        +258, +291, +303, +306,
+        +273, +291, +304, +307,
+        +264, +284, +294, +297,
+        +253, +275, +282, +290,
+        +250, +257, +271, +275,
+        +234, +253, +251, +256,
+        +268, +272, +268, +276,
+        +273, +295, +292, +287,
+        +284, +298, +302, +300,
+        +287, +294, +305, +312,
+        +283, +294, +301, +310,
+        +285, +295, +304, +304,
+        +277, +299, +292, +292,
+        +267, +279, +272, +279,
+        +480, +482, +489, +494,
+        +481, +486, +494, +490,
+        +470, +480, +485, +484,
+        +467, +470, +485, +481,
+        +457, +468, +475, +475,
+        +449, +463, +468, +468,
+        +442, +459, +468, +470,
+        +455, +459, +473, +477,
+        +868, +885, +905, +905,
+        +880, +881, +910, +910,
+        +892, +898, +911, +919,
+        +886, +888, +905, +904,
+        +880, +890, +895, +896,
+        +878, +886, +894, +890,
+        +856, +870, +893, +887,
+        +863, +861, +868, +887,
+         -34,   -8,  -14,  -21,
+          +0,  +13,  +17,   +9,
+          +3,  +25,  +24,   +9,
+         -11,  +14,  +18,  +14,
+         -21,   -2,  +11,  +12,
+         -16,   +1,   +7,   +8,
+         -16,   -1,   -1,   -3,
+         -32,   -8,  -20,  -19,
+         +12,  +17,  +13,  +14,
+          +7,  +10,  +10,  +10,
+         +27,  +22,  +14,  +15,
+         +30,  +18,   +9,   +3,
+         +26,  +23,  +13,   +7,
+          +4,   -1,   +4,   +9,
+         +15,   +6,   +7,  +53,
+         -96,  -43,   -9,   -5,
+          +7,   +5,  +13,  +10,
+         +13,   +9,  +10,   +3,
+          +0,   -1,   +1,   +1,
+        -161,  -55,  -33,  -18,
+         -11,   -7,   -2,   -2,
+          +3,   +7,  +10,  +16,
+         +20,  +32,  +30,  +43,
+         +17,   +7,  -25,   +4,
+         +25,  +19,  +13,   +7,
+          +4,   +3,   -8,   -6,
+         -13,  -14,  -14,  -18,
+    }
+};
+
+template<int N> struct stack_str
+{
+    char x[N];
+    constexpr operator char const*() const { return &x[0]; }
+    constexpr char const* c_str() const { return &x[0]; }
+    operator char*() { return x.data(); }
+    constexpr char at(size_t n) const { return x[n]; }
+    char& at(size_t n) { return x[n]; }
+    void copy(size_t& n, char const* s)
+    {
+        char c;
+        while((c = *s++) != '\0')
+            x[n++] = c;
+    }
+};
+
+static constexpr u8 const VECS[0x77 + 1 + 0x77] PROGMEM =
+{
+    239,   0,   0,   0,   0,   0,   0, 240,   0,   0,   0,   0,   0,   0, 241,   0,
+      0, 239,   0,   0,   0,   0,   0, 240,   0,   0,   0,   0,   0, 241,   0,   0,
+      0,   0, 239,   0,   0,   0,   0, 240,   0,   0,   0,   0, 241,   0,   0,   0,
+      0,   0,   0, 239,   0,   0,   0, 240,   0,   0,   0, 241,   0,   0,   0,   0,
+      0,   0,   0,   0, 239,   0,   0, 240,   0,   0, 241,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0, 239, 223, 240, 225, 241,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0, 238, 239, 240, 241, 242,   0,   0,   0,   0,   0,   0,
+    255, 255, 255, 255, 255, 255, 255,   0,   1,   1,   1,   1,   1,   1,   1,   0,
+      0,   0,   0,   0,   0,  14,  15,  16,  17,  18,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,  15,  31,  16,  33,  17,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,  15,   0,   0,  16,   0,   0,  17,   0,   0,   0,   0,   0,
+      0,   0,   0,  15,   0,   0,   0,  16,   0,   0,   0,  17,   0,   0,   0,   0,
+      0,   0,  15,   0,   0,   0,   0,  16,   0,   0,   0,   0,  17,   0,   0,   0,
+      0,  15,   0,   0,   0,   0,   0,  16,   0,   0,   0,   0,   0,  17,   0,   0,
+     15,   0,   0,   0,   0,   0,   0,  16,   0,   0,   0,   0,   0,   0,  17,
+};
+
+// square (position) delta
+struct square_delta
+{
+    u8 x;
+    constexpr square_delta reversed() const { return square_delta{ u8(-x) }; }
+
+    // north, east, south, west
+    static square_delta const NORTH, SOUTH, WEST, EAST;
+    static square_delta const NORTHWEST, NORTHEAST, SOUTHWEST, SOUTHEAST;
+    static square_delta const ZERO;
+    constexpr bool is_zero() const { return x == 0; }
+
+    static square_delta const KNIGHT_MOVES[8] PROGMEM;
+    static square_delta const KING_MOVES[8] PROGMEM;
+    static square_delta const ORTHOGONAL_DIRS[4] PROGMEM;
+    static square_delta const DIAGONAL_DIRS[4];
+
+    square_delta& operator+=(square_delta d) { x += d.x; return *this; }
+    square_delta& operator-=(square_delta d) { x -= d.x; return *this; }
+    square_delta& operator*=(s8 m) { x *= m; return *this; }
+    constexpr square_delta operator+(square_delta d) const { return square_delta{ u8(x + d.x) }; }
+    constexpr square_delta operator-(square_delta d) const { return square_delta{ u8(x - d.x) }; }
+    constexpr square_delta operator*(s8 m) const { return square_delta{ u8(x * m) }; }
+    constexpr square_delta operator-() const { return reversed(); }
+
+    constexpr bool operator==(square_delta d) const { return x == d.x; }
+    constexpr bool operator!=(square_delta d) const { return x != d.x; }
+
+    constexpr bool is_vertical() const { return (x & 0x7) == 0; }
+
+public:
+    inline square_delta vec() const { return square_delta{ pgm_read_byte(&VECS[0x77 + (s8)x]) }; }
+};
+
+constexpr square_delta const square_delta::NORTH     = square_delta{ 240 };
+constexpr square_delta const square_delta::SOUTH     = square_delta{ 16 };
+constexpr square_delta const square_delta::WEST      = square_delta{ 255 };
+constexpr square_delta const square_delta::EAST      = square_delta{ 1 };
+constexpr square_delta const square_delta::NORTHWEST = square_delta::NORTH + square_delta::WEST;
+constexpr square_delta const square_delta::NORTHEAST = square_delta::NORTH + square_delta::EAST;
+constexpr square_delta const square_delta::SOUTHWEST = square_delta::SOUTH + square_delta::WEST;
+constexpr square_delta const square_delta::SOUTHEAST = square_delta::SOUTH + square_delta::EAST;
+constexpr square_delta const square_delta::ZERO      = square_delta{ 0 };
+
+constexpr square_delta const square_delta::KNIGHT_MOVES[8] PROGMEM =
+{
+    square_delta::NORTH + square_delta::NORTHWEST,
+    square_delta::NORTH + square_delta::NORTHEAST,
+    square_delta::SOUTH + square_delta::SOUTHWEST,
+    square_delta::SOUTH + square_delta::SOUTHEAST,
+    square_delta::WEST + square_delta::NORTHWEST,
+    square_delta::WEST + square_delta::SOUTHWEST,
+    square_delta::EAST + square_delta::NORTHEAST,
+    square_delta::EAST + square_delta::SOUTHEAST,
+};
+
+constexpr square_delta const square_delta::KING_MOVES[8] PROGMEM =
+{
+    square_delta::NORTHWEST, square_delta::NORTH, square_delta::NORTHEAST, square_delta::WEST,
+    square_delta::EAST, square_delta::SOUTHWEST, square_delta::SOUTH, square_delta::SOUTHEAST,
+};
+
+constexpr square_delta const square_delta::ORTHOGONAL_DIRS[4] PROGMEM =
+{
+    square_delta::NORTH, square_delta::SOUTH, square_delta::WEST, square_delta::EAST,
+};
+constexpr square_delta const square_delta::DIAGONAL_DIRS[4] PROGMEM =
+{
+    square_delta::NORTHWEST, square_delta::NORTHEAST, square_delta::SOUTHWEST, square_delta::SOUTHEAST,
+};
+
+// square (position)
+struct square
+{
+    u8 x;
+    square& operator+=(square_delta d) { x += s8(d.x); return *this; }
+    square& operator-=(square_delta d) { x -= s8(d.x); return *this; }
+    constexpr square operator+(square_delta d) const { return square{ u8(x + s8(d.x)) }; }
+    constexpr square operator-(square_delta d) const { return square{ u8(x - s8(d.x)) }; }
+    constexpr square_delta operator-(square s) const { return square_delta{ u8(x - s.x) }; }
+    constexpr bool operator==(square s) const { return x == s.x; }
+    constexpr bool operator!=(square s) const { return x != s.x; }
+    constexpr bool operator<(square s) const { return x < s.x; }
+    constexpr bool operator>(square s) const { return x > s.x; }
+    constexpr bool operator<=(square s) const { return x <= s.x; }
+    constexpr bool operator>=(square s) const { return x >= s.x; }
+    constexpr bool is_valid() const { return !(x & 0x88); }
+    static constexpr square from_rowcol(u8 r, u8 c)
+    {
+        return square{ u8(r * 16 + c) };
+    }
+    constexpr u8 row() const { return x >> 4; }
+    constexpr u8 col() const { return x & 7; }
+    void clear_row() { x &= 0x0f; }
+    void clear_col() { x &= 0xf0; }
+    constexpr char row_char() const { return '8' - row(); }
+    constexpr char col_char() const { return 'a' + col(); }
+    constexpr stack_str<3> str() const
+    {
+        return stack_str<3>{ {col_char(), row_char(), '\0'} };
+    }
+    static square const NOWHERE;
+    constexpr bool is_nowhere() const { return s8(x) < 0; }
+
+    // index into piece-column table
+    inline constexpr u8 table_col_index() const
+    {
+        return col() > 3 ? 7 - col() : col();
+    }
+    // index into piece-square table
+    inline constexpr u8 table_index(bool flip) const
+    {
+        return ((flip ? 7 - row() : row()) << 2) + table_col_index();
+    }
+
+    // returns 0 for white, 1 for black
+    constexpr u8 square_color() const
+    {
+        return ((x >> 4) ^ x) & 1;
+    }
+};
+
+constexpr square const square::NOWHERE { 255 };
+
+// piece color
+struct piece_color
+{
+    enum : u8 { W_ = 32, B_ = 64, X_ = 96 };
+    u8 x;
+    static piece_color const W;
+    static piece_color const B;
+
+    //
+    // the following methods assume not X
+    //
+
+    constexpr square_delta forward() const { return square_delta{ u8(x - 48) }; }
+    constexpr piece_color opposite() const { return piece_color{ u8(x ^ (W_ | B_)) }; }
+    constexpr u8 promotion_row() const { return u8(32 - x) >> 5; } // 0 or 7
+    constexpr u8 pawn_base_row() const { return 6 ^ promotion_row(); } // 6 or 1
+    constexpr u8 pawn_ep_row()   const { return 4 ^ promotion_row(); } // 4 or 3
+
+    // returns 0 or 1
+    constexpr u8 binary_index() const { return x >> 6; }
+    constexpr bool is_black() const { return (x & B_) != 0; }
+    constexpr bool is_white() const { return (x & W_) != 0; }
+
+    constexpr bool operator==(piece_color c) const { return x == c.x; }
+    constexpr bool operator!=(piece_color c) const { return x != c.x; }
+};
+
+constexpr piece_color const piece_color::W { piece_color::W_ };
+constexpr piece_color const piece_color::B { piece_color::B_ };
+
+static constexpr u8 const CASTLE_WQ = (1 << 0);
+static constexpr u8 const CASTLE_BQ = (1 << 1);
+static constexpr u8 const CASTLE_WK = (1 << 5);
+static constexpr u8 const CASTLE_BK = (1 << 6);
+
+static constexpr u8 castle_q(piece_color c)
+{
+    return c.x >> 5;
+}
+static constexpr u8 castle_k(piece_color c)
+{
+    return c.x;
+}
+
+static constexpr u8 const CASTLING_SPOILERS[] PROGMEM =
+{
+    ~CASTLE_BQ, 0xff, 0xff, 0xff, ~(CASTLE_BQ | CASTLE_BK), 0xff, 0xff, ~CASTLE_BK,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    ~CASTLE_WQ, 0xff, 0xff, 0xff, ~(CASTLE_WQ | CASTLE_WK), 0xff, 0xff, ~CASTLE_WK,
+};
+
+static constexpr u8 const C_ORTH    = 0x01;
+static constexpr u8 const C_DIAG    = 0x02;
+static constexpr u8 const C_KNIGHT  = 0x04;
+static constexpr u8 const C_SIDE    = 0x08;
+static constexpr u8 const C_FORW    = 0x10;
+static constexpr u8 const C_FDIAG   = 0x20;
+static constexpr u8 const C_BACKW   = 0x40;
+static constexpr u8 const C_BDIAG   = 0x80;
+static constexpr u8 const C_KING    = (C_FDIAG | C_BDIAG | C_SIDE | C_FORW | C_BACKW);
+static constexpr u8 const C_BISHOP  = (C_FDIAG | C_BDIAG | C_DIAG);
+static constexpr u8 const C_ROOK    = (C_SIDE | C_FORW | C_BACKW | C_ORTH);
+static constexpr u8 const C_WPAWN   = (C_FDIAG);
+static constexpr u8 const C_BPAWN   = (C_BDIAG);
+static constexpr u8 const C_QUEEN   = (C_BISHOP | C_ROOK);
+static constexpr u8 const C_CONTACT = (C_KING | C_KNIGHT);
+static constexpr u8 const C_DISTANT = (C_ORTH | C_DIAG);
+
+static constexpr u8 const CAPTS[8] PROGMEM =
+{
+    0, C_WPAWN, C_BPAWN, C_KNIGHT, C_BISHOP, C_ROOK, C_QUEEN, C_KING
+};
+
+static constexpr u8 const DELTA_CAPTS[0x99 + 1 + 0x77] PROGMEM =
+{
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   2,   0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   0,
+    2,   0,   0,   2,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   2,
+    0,   0,   0,   0,   2,   0,   0,   0,   0,   1,   0,   0,   0,   0,   2,   0,
+    0,   0,   0,   0,   0,   2,   0,   0,   0,   1,   0,   0,   0,   2,   0,   0,
+    0,   0,   0,   0,   0,   0,   2,   0,   0,   1,   0,   0,   2,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   2,   4,   1,   4,   2,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   4,  32,  16,  32,   4,   0,   0,   0,   0,
+    0,   0,   1,   1,   1,   1,   1,   1,   8,   0,   8,   1,   1,   1,   1,   1,
+    1,   0,   0,   0,   0,   0,   0,   4, 128,  64, 128,   4,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   2,   4,   1,   4,   2,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   2,   0,   0,   1,   0,   0,   2,   0,   0,   0,
+    0,   0,   0,   0,   0,   2,   0,   0,   0,   1,   0,   0,   0,   2,   0,   0,
+    0,   0,   0,   0,   2,   0,   0,   0,   0,   1,   0,   0,   0,   0,   2,   0,
+    0,   0,   0,   2,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   2,
+    0,   0,   2,   0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   0,   0,   0,
+    2,
+};
+
+// piece type
+struct piece_type
+{
+    enum : u8 { X_, WP_, BP_, N_, B_, R_, Q_, K_ };
+    u8 x;
+
+    static piece_type const WPAWN;
+    static piece_type const BPAWN;
+    static piece_type const KNIGHT;
+    static piece_type const BISHOP;
+    static piece_type const ROOK;
+    static piece_type const QUEEN;
+    static piece_type const KING;
+
+    static constexpr piece_type pawn(piece_color c) { return piece_type{ u8(WP_ + c.binary_index()) }; }
+
+    // assumes it is known to not be X (nothing)
+    constexpr bool is_pawn() const { return x <= BP_; }
+
+    constexpr bool is_pawn_of_color(piece_color c) { return x == (c.x >> 5); }
+
+    // assumes it is known to be a slider
+    constexpr bool is_orthogonal_slider() const { return (x & 3) != 0; }
+    constexpr bool is_diagonal_slider() const { return (x & 1) == 0; }
+
+    constexpr bool operator==(piece_type t) const { return x == t.x; }
+    constexpr bool operator!=(piece_type t) const { return x != t.x; }
+
+private:
+    static constexpr char UCI[8] = { 'x', 'p', 'p', 'n', 'b', 'r', 'q', 'k' };
+public:
+    inline bool can_cap_delta(square_delta d) const
+    {
+        return (pgm_read_byte(&CAPTS[x]) & pgm_read_byte(&DELTA_CAPTS[0x99 + (s8)d.x])) != 0;
+    }
+    inline bool can_cap_delta_contact(square_delta d) const
+    {
+        return (pgm_read_byte(&CAPTS[x]) & pgm_read_byte(&DELTA_CAPTS[0x99 + (s8)d.x]) & C_CONTACT) != 0;
+    }
+    inline bool can_cap_delta_distant(square_delta d) const
+    {
+        return (pgm_read_byte(&CAPTS[x]) & pgm_read_byte(&DELTA_CAPTS[0x99 + (s8)d.x]) & C_DISTANT) != 0;
+    }
+    constexpr bool can_cap_orthogonal() const
+    {
+        return (CAPTS[x] & C_ORTH) != 0;
+    }
+    constexpr char uci_char() const { return UCI[x]; }
+};
+
+constexpr piece_type const piece_type::WPAWN  { piece_type::WP_ };
+constexpr piece_type const piece_type::BPAWN  { piece_type::BP_ };
+constexpr piece_type const piece_type::KNIGHT { piece_type::N_ };
+constexpr piece_type const piece_type::BISHOP { piece_type::B_ };
+constexpr piece_type const piece_type::ROOK   { piece_type::R_ };
+constexpr piece_type const piece_type::QUEEN  { piece_type::Q_ };
+constexpr piece_type const piece_type::KING   { piece_type::K_ };
+
+// piece
+struct piece
+{
+    u8 x;
+    static constexpr u8 const MASK_T_ = 0x7;
+    static constexpr u8 const MASK_C_ = piece_color::W_ | piece_color::B_ | piece_color::X_;
+    static piece const NOTHING;
+    static piece const GUARD;
+    constexpr piece_type type() const { return piece_type{ u8(x & MASK_T_) }; }
+    constexpr piece_color color() const { return piece_color{ u8(x & MASK_C_) }; }
+    constexpr bool is_nothing() const { return x == 0; }
+    constexpr bool is_pawn() const { return type().is_pawn(); }
+    constexpr bool is_pawn_of_color(piece_color c) const { return type().is_pawn_of_color(c); }
+    constexpr bool is_of_color(piece_color c) const { return color() == c; }
+    static constexpr piece from_type_color(piece_type t, piece_color c) { return piece{ u8(t.x + c.x) }; }
+    static constexpr piece pawn(piece_color c) { return from_type_color(piece_type::pawn(c), c); }
+
+    constexpr bool operator==(piece p) const { return x == p.x; }
+    constexpr bool operator!=(piece p) const { return x != p.x; }
+
+    static char const PRINT_CHARS[];
+    constexpr char print_char() const
+    {
+        return PRINT_CHARS[8 * color().binary_index() + type().x];
+    }
+
+    static piece const WP, WN, WB, WR, WQ, WK;
+    static piece const BP, BN, BB, BR, BQ, BK;
+};
+
+// not used on arduino
+constexpr char const piece::PRINT_CHARS[] = ".PXNBRQK.xpnbrqk";
+
+constexpr piece const piece::NOTHING { 0 };
+constexpr piece const piece::GUARD   { u8(piece_color::X_) };
+
+constexpr piece const piece::WP = piece::from_type_color(piece_type::WPAWN, piece_color::W);
+constexpr piece const piece::WN = piece::from_type_color(piece_type::KNIGHT, piece_color::W);
+constexpr piece const piece::WB = piece::from_type_color(piece_type::BISHOP, piece_color::W);
+constexpr piece const piece::WR = piece::from_type_color(piece_type::ROOK, piece_color::W);
+constexpr piece const piece::WQ = piece::from_type_color(piece_type::QUEEN, piece_color::W);
+constexpr piece const piece::WK = piece::from_type_color(piece_type::KING, piece_color::W);
+constexpr piece const piece::BP = piece::from_type_color(piece_type::BPAWN, piece_color::B);
+constexpr piece const piece::BN = piece::from_type_color(piece_type::KNIGHT, piece_color::B);
+constexpr piece const piece::BB = piece::from_type_color(piece_type::BISHOP, piece_color::B);
+constexpr piece const piece::BR = piece::from_type_color(piece_type::ROOK, piece_color::B);
+constexpr piece const piece::BQ = piece::from_type_color(piece_type::QUEEN, piece_color::B);
+constexpr piece const piece::BK = piece::from_type_color(piece_type::KING, piece_color::B);
+
+static_assert(sizeof(square) == 1, "bad size");
+static_assert(sizeof(square_delta) == 1, "bad size");
+static_assert(sizeof(piece) == 1, "bad size");
+static_assert(sizeof(piece_type) == 1, "bad size");
+static_assert(sizeof(piece_color) == 1, "bad size");
+
+struct move
+{
+    // flags:
+    //    castle q  : a<3>
+    //    castle k  : a<7>
+    //    pawn dmove: b<3>
+    //    en passant: b<7>
+    u8 a, b;
+    constexpr square fr() const { return square{ u8(a & 0x77) }; }
+    constexpr square to() const { return square{ u8(b & 0x77) }; }
+    constexpr square nonflag_fr() const { return square{ u8(a) }; }
+    constexpr square nonflag_to() const { return square{ u8(b) }; }
+    move& set_fr(square s) { a &= 0x88; a |= s.x; return *this; }
+    move& set_to(square s) { b &= 0x88; b |= s.x; return *this; }
+    move& clear_set_fr(square s) { a = s.x; return *this; }
+    move& clear_set_to(square s) { b = s.x; return *this; }
+    constexpr bool is_castle() const { return (b & 0x08) != 0; }
+    constexpr bool is_promotion() const { return (b & 0x80) != 0; }
+    constexpr bool is_pawn_dmove() const { return (a & 0x08) != 0; }
+    constexpr bool is_en_passant() const { return (a & 0x80) != 0; }
+    constexpr bool is_special()    const { return ((a | b) & 0x88) != 0; }
+    constexpr bool is_non_dmove_special() const
+    {
+        return ((a & 0x80) | (b & 0x88)) != 0;
+    }
+    move& clear_promotion_piece_type()
+    {
+        a &= 0x77;
+        return *this;
+    }
+    move& clear_set_promotion_piece_type(piece_type t)
+    {
+        return clear_promotion_piece_type().set_promotion_piece_type(t);
+    }
+    move& set_promotion_piece_type(piece_type t)
+    {
+        u8 x = t.x - piece_type::N_;
+        a |= (x << 3) & 0x08;
+        a |= (x << 6) & 0x80;
+        return *this;
+    }
+    constexpr piece_type promotion_piece_type() const
+    {
+        return piece_type{ u8((((a & 0x08) >> 3) | ((a & 0x80) >> 6)) + piece_type::N_) };
+    }
+    move& set_castle() { b |= 0x08; return *this; }
+    move& set_promotion() { b |= 0x80; return *this; }
+    move& set_pawn_dmove() { a |= 0x08; return *this; }
+    move& set_en_passant() { a |= 0x80; return *this; }
+    stack_str<6> uci_str() const;
+
+    constexpr bool operator==(move m) { return a == m.a && b == m.b; }
+    constexpr bool operator!=(move m) { return !(a == m.a && b == m.b); }
+
+    static move const NO_MOVE;
+    constexpr bool is_nothing() const { return (a | b) == 0; }
+};
+
+constexpr move const move::NO_MOVE { 0, 0 };
+
+// piece list index
+struct piece_index
+{
+    u8 x;
+    static constexpr u8 const MASK_C_ = piece_color::W_ | piece_color::B_ | piece_color::X_;
+    constexpr piece_color color() const { return piece_color{ u8(x & MASK_C_) }; }
+    constexpr bool is_of_color(piece_color c) { return color() == c; }
+    constexpr bool is_not_of_color(piece_color c) { return (x & c.x) == 0; }
+    constexpr bool is_nothing() const { return x == 0; }
+    constexpr bool is_guard() const { return x == 96; }
+    constexpr bool is_pawn_of_color(piece_color c) const
+    {
+        return u8(x - c.x - 2) < 8;
+    }
+    static piece_index const GUARD, NOTHING;
+    piece_index operator+(u8 d) const { return piece_index{ u8(x + d) }; }
+    piece_index operator-(u8 d) const { return piece_index{ u8(x - d) }; }
+    piece_index& operator+=(u8 d) { x += d; return *this; }
+    piece_index& operator-=(u8 d) { x -= d; return *this; }
+    
+    constexpr bool operator==(piece_index i) const { return x == i.x; }
+    constexpr bool operator!=(piece_index i) const { return x != i.x; }
+    constexpr bool operator<=(piece_index i) const { return x <= i.x; }
+    constexpr bool operator>=(piece_index i) const { return x >= i.x; }
+    constexpr bool operator<(piece_index i) const { return x < i.x; }
+    constexpr bool operator>(piece_index i) const { return x > i.x; }
+};
+
+constexpr piece_index const piece_index::GUARD   { piece::GUARD.x };
+constexpr piece_index const piece_index::NOTHING { piece::NOTHING.x };
+
+struct game
+{
+    // 0x88 board indexes piece lists
+    // unused space used by state stack
+#if CH2K_USE_STD_ARRAY
+    std::array<piece_index, 256> square_to_index_; // link from position to index
+#else
+    piece_index square_to_index_[256];
+#endif
+
+    // piece list order:
+    //    nothing: 0
+    //    king: 1
+    //    pawns: 2-9
+    //    knights: 10-last_knight
+    //    sliders: first_slider-30
+    //    nothing: 31
+    // indices available to reuse: 18-27
+
+    // indices reused (for each color):
+    //    last_knight: 18
+    //    first_slider: 19
+
+
+    // link from index to piece (with space for guard)
+#if CH2K_USE_STD_ARRAY
+    std::array<piece, 65> index_to_piece_;
+#else
+    piece index_to_piece_[65];
+#endif
+
+    // extra space for accessing piece_index::NOTHING
+    // scratch space: indices 1 to 31 (31 bytes)
+#if CH2K_USE_STD_ARRAY
+    std::array<square, 96> index_to_square_; // link from index to position
+#else
+    square index_to_square_[96];
+#endif
+
+    // piece value total: reuses the "nothing" index slot in index_to_square
+    inline u8& pval(piece_color c) { return *(u8*)&index_to_square_[c.x]; }
+
+    constexpr piece_index square_to_index(square s) const { return square_to_index_[s.x]; }
+    piece_index& square_to_index(square s) { return square_to_index_[s.x]; }
+
+    // state stack embedded in square_to_index_ array
+    // (exactly sized to use up all available free space)
+    struct state
+    {
+        move lastmove;
+        piece_index cap;
+        u8 flags;
+        uint8_t half_move;
+    };
+    static constexpr size_t const STATE_STACK_SIZE = 68 / sizeof(state);
+    u8 state_index;
+
+    inline state* stack_base()
+    {
+        return reinterpret_cast<state*>(&square_to_index_[0x99]);
+    }
+    inline state& stack()
+    {
+        return stack_base()[state_index];
+    }
+    state& stack_push()
+    {
+        auto& prev = stack();
+        ++state_index;
+        CH2K_ASSERT(state_index < STATE_STACK_SIZE);
+        auto& curr = stack();
+        curr.flags = prev.flags;
+        curr.half_move = prev.half_move;
+        return curr;
+    }
+    state& stack_pop()
+    {
+        state& r = stack();
+        --state_index;
+        return r;
+    }
+
+    void stack_reset()
+    {
+        state& s = stack();
+        state_index = 0;
+        stack() = s;
+    }
+
+    // movegen stack: big memory hog
+    static constexpr size_t const MOVEGEN_STACK_SIZE = 256;
+    move mvs_[MOVEGEN_STACK_SIZE];
+
+    // return piece at square
+    constexpr piece at(square s) const { return index_to_piece(square_to_index(s)); }
+
+    constexpr piece index_to_piece(piece_index i) const { return index_to_piece_[i.x - 32]; }
+    piece& index_to_piece(piece_index i) { return index_to_piece_[i.x - 32]; }
+
+    constexpr piece square_to_piece(square s) const { return index_to_piece(square_to_index(s)); }
+    piece& square_to_piece(square s) { return index_to_piece(square_to_index(s)); }
+
+    constexpr square index_to_square(piece_index i) const { return index_to_square_[i.x]; }
+    square& index_to_square(piece_index i) { return index_to_square_[i.x]; }
+
+    piece_index& set_last_knight(piece_color c) { return *(piece_index*)(&index_to_piece_[c.x - 32 + 18].x); }
+    piece_index& set_first_slider(piece_color c) { return *(piece_index*)(&index_to_piece_[c.x - 32 + 19].x); }
+
+    constexpr piece_index king(piece_color c) const { return piece_index{ u8(c.x + 1) }; }
+    constexpr piece_index first_pawn(piece_color c) const { return piece_index{ u8(c.x + 2) }; }
+    constexpr piece_index last_pawn(piece_color c) const { return piece_index{ u8(first_pawn(c).x + 8) }; }
+    constexpr piece_index first_knight(piece_color c) const { return last_pawn(c); }
+    piece_index last_knight(piece_color c) const { return piece_index{ index_to_piece_[c.x - 32 + 18].x }; }
+    piece_index first_slider(piece_color c) const { return piece_index{ index_to_piece_[c.x - 32 + 19].x }; }
+    constexpr piece_index last_slider(piece_color c) const { return piece_index{ u8(c.x + 32) }; }
+
+    struct index_iterator
+    {
+        piece_index i;
+        index_iterator(piece_index i) : i(i) {}
+        index_iterator& operator++() { ++i.x; return *this; }
+        bool operator!=(index_iterator other) const { return i.x != other.i.x; }
+        constexpr piece_index operator*() const { return i; }
+    };
+
+    struct pawn_collection
+    {
+        game const& g;
+        piece_color c;
+        index_iterator begin() { return g.first_pawn(c); }
+        index_iterator end() { return g.last_pawn(c); }
+    };
+    struct knight_collection
+    {
+        game const& g;
+        piece_color c;
+        index_iterator begin() { return g.first_knight(c); }
+        index_iterator end() { return g.last_knight(c); }
+    };
+    struct slider_collection
+    {
+        game const& g;
+        piece_color c;
+        index_iterator begin() { return g.first_slider(c); }
+        index_iterator end() { return g.last_slider(c); }
+    };
+
+    pawn_collection pawns(piece_color c) const { return pawn_collection{ *this, c }; }
+    knight_collection knights(piece_color c) const { return knight_collection{ *this, c }; }
+    slider_collection sliders(piece_color c) const { return slider_collection{ *this, c }; }
+
+    void add_game_data_piece(square s, u8 p)
+    {
+        piece_color c = p & 0x8 ? piece_color::B : piece_color::W;
+        p &= 7;
+        switch(p)
+        {
+        case GD__B:
+            c_ = piece_color::B;
+            // fallthrough
+        case GD___:
+            square_to_index(s) = piece_index::NOTHING;
+            return;
+        case GD_P: pval(c) += PVALS[1]; add_pawn(s, c); return;
+        case GD_N: pval(c) += PVALS[3]; add_knight(s, c); return;
+        case GD_C:
+            if(s.col() == 0)
+                stack().flags |= castle_q(c);
+            else
+                stack().flags |= castle_k(c);
+            add_slider(s, c, piece_type::ROOK);
+            pval(c) += PVALS[5];
+            return;
+        case GD_B: case GD_R: case GD_Q:
+            add_slider(s, c, piece_type{ p });
+            pval(c) += pgm_read_byte(&PVALS[p]);
+            return;
+        case GD_K: pval(c) += PVALS[7]; add_king(s, c); return;
+        default: return;
+        }
+    }
+
+    piece_index add_pawn(square s, piece_color color)
+    {
+        for(auto i : pawns(color))
+            if(index_to_piece(i).is_nothing())
+            {
+                index_to_piece(i) = piece::pawn(color);
+                index_to_square(i) = s;
+                square_to_index(s) = i;
+                return i;
+            }
+        return piece_index::NOTHING;
+    }
+    piece_index add_knight(square s, piece_color color)
+    {
+        piece_index i = last_knight(color);
+        set_last_knight(color).x += 1;
+        index_to_piece(i) = piece::from_type_color(piece_type::KNIGHT, color);
+        index_to_square(i) = s;
+        square_to_index(s) = i;
+        return i;
+    }
+    piece_index add_slider(square s, piece_color color, piece_type type)
+    {
+        piece_index i = (set_first_slider(color) -= 1);
+        index_to_piece(i) = piece::from_type_color(type, color);
+        index_to_square(i) = s;
+        square_to_index(s) = i;
+        return i;
+    }
+    void add_king(square s, piece_color color)
+    {
+        piece_index i = king(color);
+        index_to_piece(i) = piece::from_type_color(piece_type::KING, color);
+        index_to_square(i) = s;
+        square_to_index(s) = i;
+    }
+
+    piece_color c_; // whose turn it is
+    u8 in_check;
+
+    static constexpr u8 const GEN_MOVES_OUT_OF_MEM = 255;
+    u8 gen_moves(move* m);
+    bool en_passant_pinned(square king, square sa, square sb);
+
+    // remove noncaptures
+    u8 reduce_qsearch(move* m, u8 n);
+
+    u8 order_moves(move* m, u8 n, u8 depth); // returns starting index of bad caps
+    s8 see_square(square s);
+    s8 see_capture(move mv);
+
+    bool capturable(piece_color by_col, square x);
+
+    void do_move(move m);
+    void undo_move(move m);
+
+    void do_null_move();
+    void undo_null_move();
+
+    void load_game_data(u8 const* d);
+    void load_fen(char const* fen);
+    void new_game() { load_game_data(NEW_GAME_DATA); }
+
+    // evaluation settings
+#if CH2K_TUNABLE_EVAL
+    inline eval_settings_union const& get_eval_union() const { return *custom_eval_settings_; }
+#define CH2K_GET_EVAL_SETTING(n__) custom_eval_settings_->v.n__
+    eval_settings_union const* custom_eval_settings_;
+    eval_settings_union eval_gradient_;
+#else
+    inline eval_settings_union const& get_eval_union() const { return DEFAULT_EVAL_SETTINGS; }
+#define CH2K_GET_EVAL_SETTING(n__) (score)pgm_read_word(&DEFAULT_EVAL_SETTINGS.v.n__)
+#endif
+
+#ifndef CH2K_ARDUINO
+    uint64_t nodes_, max_nodes_;
+#else
+    uint16_t nodes_, max_nodes_;
+#endif
+    score score_;
+    uint8_t depth_, max_depth_;
+    move best_;
+    uint8_t stop_;
+
+#if CH2K_MAX_MOVE_STACK
+    uint16_t max_move_stack_;
+#endif
+
+    score eval()
+    {
+        //score r = eval_side<true>() - eval_side<false>();
+        score r = eval_side(true) - eval_side(false);
+        if(c_.is_white())
+            r += CH2K_GET_EVAL_SETTING(tempo);
+        else
+            r -= CH2K_GET_EVAL_SETTING(tempo);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.tempo += c_.is_white() ? 1.0 : -1.0;
+#endif
+        return r;
+    }
+
+    score eval_relative()
+    {
+        ++nodes_;
+        score r;
+        // endgame produces relative score
+        if(endgame(r, state_index)) return r;
+        r = eval();
+        if(!c_.is_white()) r = -r;
+        return r;
+    }
+
+    score eval_relative_with_see()
+    {
+        score v = eval_relative();
+        if(stack().cap.is_nothing()) // TODO: remove this?
+            return v;
+        return v + score(see_square(stack().lastmove.to())) * 25;
+    }
+
+    score eval_side(bool is_white);
+
+    bool check_draw_50move();
+    u8 check_draw_repetition();
+    bool check_draw_material();
+    bool check_draw_material_side(piece_color c);
+
+    // check for draw by material or specific endgame scenario
+    bool endgame(score& s, u8 depth);
+    // check one side for combinations
+    bool endgame_side(piece_color c, score& s, u8 depth);
+
+    score qsearch(move* m, score a, score b, u8 depth);
+    score negamax(move* m, score a, score b, u8 depth, u8 max_depth);
+    score negamax_root(score a, score b);
+    score aspiration_window(u8 depth, score prev_score);
+    void iterative_deepening();
+
+    static constexpr u8 const REP_MOVES_SIZE = 100;
+#if CH2K_USE_STD_ARRAY
+    std::array<move, REP_MOVES_SIZE> rep_moves_;
+#else
+    move rep_moves_[REP_MOVES_SIZE];
+#endif
+    u8 rep_move_head_;
+
+    move get_rep_move(u8 n)
+    {
+        if(n >= rep_move_head_)
+            n = REP_MOVES_SIZE - 1 - (n - rep_move_head_);
+        else
+            n = rep_move_head_ - n - 1;
+        return rep_moves_[n];
+    }
+
+    void execute_move(move m)
+    {
+        rep_moves_[rep_move_head_] = m;
+        if(++rep_move_head_ >= REP_MOVES_SIZE)
+            rep_move_head_ = 0;
+        do_move(m);
+        stack_reset();
+    }
+
+    bool move_is_reversible(move mv) const
+    {
+        if(mv.is_special()) return false;
+        if(square_to_index(mv.nonflag_fr()).is_pawn_of_color(c_))
+            return false;
+        return square_to_index(mv.nonflag_to()).is_nothing();
+    }
+
+    enum
+    {
+        STATUS_NORMAL,
+        STATUS_CHECK,
+        STATUS_DRAW_50MOVE,
+        STATUS_DRAW_REPETITION,
+        STATUS_DRAW_MATERIAL,
+        STATUS_DRAW_STALEMATE,
+        STATUS_MATED
+    };
+    // do not call from within search
+    u8 check_status();
+
+    stack_str<128> str() const;
+
+    // debug method
+#ifdef NDEBUG
+    inline void verify() const;
+#else
+    void verify() const
+    {
+        for(u8 ii = 1; ii < 31; ++ii)
+        {
+            piece_index i;
+            i = piece_index{ u8(ii + 32) };
+            if(!index_to_square(i).is_nowhere())
+                CH2K_ASSERT(square_to_index(index_to_square(i)) == i);
+            i = piece_index{ u8(ii + 64) };
+            if(!index_to_square(i).is_nowhere())
+                CH2K_ASSERT(square_to_index(index_to_square(i)) == i);
+        }
+        for(u8 r = 0; r < 8; ++r)
+        {
+            for(u8 c = 0; c < 8; ++c)
+            {
+                square s = square::from_rowcol(r, c);
+                piece_index i = square_to_index(s);
+                if(!i.is_nothing())
+                    CH2K_ASSERT(index_to_square(i) == s);
+            }
+        }
+    }
+#endif
+};
+
+#ifdef _MSC_VER
+static constexpr size_t const X = sizeof(game);
+#endif
+
+static constexpr s8 const SEE_PV[] PROGMEM = { 0, 4, 4, 12, 13, 20, 36 };
+
+s8 game::see_square(square s)
+{
+    s8 v = 0;
+
+    // get smallest attacker
+    piece_index attacker = piece_index::NOTHING;
+
+    {
+        piece_color const ec = c_.opposite();
+        piece_index i;
+        square_delta d = ec.forward();
+        if((i = square_to_index(s + d + square_delta::WEST)).is_pawn_of_color(c_))
+        {
+            if(s.row() == ec.promotion_row())
+                v += SEE_PV[piece_type::Q_] - SEE_PV[piece_type::WP_];
+            attacker = i;
+            goto recurse;
+        }
+        if((i = square_to_index(s + d + square_delta::EAST)).is_pawn_of_color(c_))
+        {
+            if(s.row() == ec.promotion_row())
+                v += SEE_PV[piece_type::Q_] - SEE_PV[piece_type::WP_];
+            attacker = i;
+            goto recurse;
+        }
+    }
+
+    for(piece_index i : knights(c_))
+    {
+        square ts = index_to_square(i);
+        if(ts.is_nowhere()) continue;
+        if(piece_type::KNIGHT.can_cap_delta(s - ts))
+        {
+            attacker = i;
+            goto recurse;
+        }
+    }
+
+    // bishops
+    for(piece_index i : sliders(c_))
+    {
+        square ts = index_to_square(i);
+        if(ts.is_nowhere()) continue;
+        if(index_to_piece(i).type() != piece_type::BISHOP)
+            continue;
+        if(!piece_type::BISHOP.can_cap_delta(s - ts))
+            continue;
+        square_delta d = (s - ts).vec();
+        while(square_to_index(ts += d).is_nothing())
+            ;
+        if(ts == s)
+        {
+            attacker = i;
+            goto recurse;
+        }
+    }
+
+    // rooks
+    for(piece_index i : sliders(c_))
+    {
+        square ts = index_to_square(i);
+        if(ts.is_nowhere()) continue;
+        if(index_to_piece(i).type() != piece_type::ROOK)
+            continue;
+        if(!piece_type::ROOK.can_cap_delta(s - ts))
+            continue;
+        square_delta d = (s - ts).vec();
+        while(square_to_index(ts += d).is_nothing())
+            ;
+        if(ts == s)
+        {
+            attacker = i;
+            goto recurse;
+        }
+    }
+
+    // queens
+    for(piece_index i : sliders(c_))
+    {
+        square ts = index_to_square(i);
+        if(ts.is_nowhere()) continue;
+        if(index_to_piece(i).type() != piece_type::QUEEN)
+            continue;
+        if(!piece_type::QUEEN.can_cap_delta(s - ts))
+            continue;
+        square_delta d = (s - ts).vec();
+        while(square_to_index(ts += d).is_nothing())
+            ;
+        if(ts == s)
+        {
+            attacker = i;
+            goto recurse;
+        }
+    }
+
+recurse:
+
+    if(!attacker.is_nothing())
+    {
+        square as = index_to_square(attacker);
+        CH2K_ASSERT(!as.is_nowhere());
+        v += (s8)pgm_read_byte(&SEE_PV[square_to_piece(s).type().x]);
+        if(state_index == STATE_STACK_SIZE - 1)
+            return v;
+        move mv = move{}.clear_set_fr(as).clear_set_to(s);
+        CH2K_ASSERT(!square_to_index(as).is_nothing());
+        CH2K_ASSERT(!square_to_index(s).is_nothing());
+        CH2K_ASSERT(square_to_piece(as).type().can_cap_delta(s - as));
+        do_move(mv);
+        v -= see_square(s);
+        undo_move(mv);
+        v = tmax<s8>(0, v);
+    }
+
+    return v;
+}
+
+s8 game::see_capture(move mv)
+{
+    s8 v;
+    if(mv.is_promotion())
+    {
+        v = (s8)pgm_read_byte(&SEE_PV[mv.promotion_piece_type().x]);
+        v -= SEE_PV[piece_type::WP_];
+    }
+    else
+        v = (s8)pgm_read_byte(&SEE_PV[square_to_piece(mv.to()).type().x]);
+    if(state_index == STATE_STACK_SIZE - 1)
+        return v;
+    do_move(mv);
+    v -= see_square(mv.to());
+    undo_move(mv);
+    return v;
+}
+
+static void sort_moves_descending(s8* scores, move* m, u8 n)
+{
+    for(u8 j, i = 1; i < n; ++i)
+    {
+        move xm = m[i];
+        s8 xs = scores[i];
+        for(j = i; j > 0 && scores[j - 1] < xs; --j)
+        {
+            m[j] = m[j - 1];
+            scores[j] = scores[j - 1];
+        }
+        m[j] = xm;
+        scores[j] = xs;
+    }
+}
+
+u8 game::order_moves(move* m, u8 n, u8 depth)
+{
+    static constexpr u8 const MAX_SORT = 31;
+#if 0
+    s8 scores[MAX_SORT];
+#else
+    s8* scores = reinterpret_cast<s8*>(&index_to_square_[1]);
+#endif
+    for(u8 i = 0; i < n; ++i)
+    {
+        CH2K_ASSERT(!m[i].is_nothing());
+        CH2K_ASSERT(!square_to_index(m[i].fr()).is_nothing());
+    }
+    constexpr u8 const ia = 0;
+    u8 ib = 0, ic, ibc;
+    // move all captures/promotions to the front
+    for(u8 i = ia; i < n; ++i)
+    {
+        if(m[i].is_promotion() || !square_to_index(m[i].to()).is_nothing())
+            swap(m[i], m[ib++]);
+    }
+    // obtain SEE scores for each capture
+    ib = tmin<u8>(ib, ia + MAX_SORT);
+    for(u8 i = ia; i < ib; ++i)
+        scores[i - ia] = see_capture(m[i]);
+    // order captures by score (insertion sort)
+    sort_moves_descending(scores, m + ia, ib - ia);
+    // move bad captures to end
+    ic = n;
+    for(u8 i = ia; i < ib; ++i)
+    {
+        if(scores[i] < 0)
+        {
+            ic = n - ib;
+            for(u8 j = i; j < ib; ++j)
+                swap(m[j], m[ic + j]);
+            ic = n - ib + i;
+            ib = i;
+        }
+    }
+    ibc = ic;
+
+    // skip quiet ordering if there is a good capture
+    if(ib > ia)
+        return ibc;
+
+    // assign quiet scores
+    ic = tmin<u8>(ic, ib + MAX_SORT);
+    for(u8 i = ib; i < ic; ++i)
+    {
+        bool flip = c_.is_black();
+        square s = m[i].fr();
+        u8 pti = square_to_piece(s).type().x - 2;
+        if(pti > 5) pti = 0;
+        s16 d = (s16)pgm_read_word(&get_eval_union().pt.t[pti][m[i].to().table_index(flip)]);
+        d -= (s16)pgm_read_word(&get_eval_union().pt.t[pti][s.table_index(flip)]);
+        if(d > 127) d = 127;
+        if(d < -127) d = -127;
+        scores[i - ib] = s8(d);
+    }
+    // order quiet moves
+    sort_moves_descending(scores, m + ib, ic - ib);
+
+    return ibc;
+}
+
+u8 game::reduce_qsearch(move* m, u8 n)
+{
+    for(u8 i = 0; i < n; ++i)
+    {
+        if(!square_to_index(m[i].to()).is_nothing() ||
+            m[i].is_promotion() || m[i].is_en_passant())
+            continue;
+        m[i--] = m[--n];
+    }
+    return n;
+}
+
+score game::qsearch(move* m, score a, score b, u8 depth)
+{
+#if CH2K_MAX_MOVE_STACK
+    max_move_stack_ = tmax(max_move_stack_, uint16_t(m - &mvs_[0]));
+#endif
+    //if(depth > max_depth_ * 2)
+    //    return eval_relative_with_see();
+    if(state_index == STATE_STACK_SIZE - 1)
+        return eval_relative();
+    if(nodes_ > max_nodes_) return 0;
+    u8 n = gen_moves(m);
+#if CH2K_MAX_MOVE_STACK
+    if(n == GEN_MOVES_OUT_OF_MEM) max_move_stack_ = MOVEGEN_STACK_SIZE;
+#endif
+    if(n == GEN_MOVES_OUT_OF_MEM)
+        return eval_relative_with_see();
+    if(n == 0)
+        return in_check ? SCORE_LOSS + depth : SCORE_DRAW;
+    score stand_pat = eval_relative();
+    if(stand_pat >= b)
+        return b;
+    a = tmax<score>(a, stand_pat);
+    score v = SCORE_LOSS;
+    for(u8 i = 0; i < n; ++i)
+    {
+        CH2K_ASSERT(!m[i].is_nothing());
+        CH2K_ASSERT(!square_to_index(m[i].fr()).is_nothing());
+    }
+    n = reduce_qsearch(m, n);
+    u8 bc = order_moves(m, n, depth);
+    for(u8 i = 0; i < n; ++i)
+    {
+        do_move(m[i]);
+        v = tmax<score>(v, -qsearch(m + n, -b, -a, depth + 1));
+        undo_move(m[i]);
+        a = tmax<score>(a, v);
+        if(a >= b) return b;
+    }
+    return a;
+}
+
+bool game::check_draw_50move()
+{
+    u8 half = stack().half_move;
+    if(half >= 100)
+        return true;
+    return false;
+}
+
+u8 game::check_draw_repetition()
+{
+    u8 hm = stack().half_move;
+    if(hm <= 4) return 0;
+#if CH2K_USE_STD_ARRAY
+    std::array<square_delta, 64> d;
+#else
+    square_delta d[64];
+#endif
+    square_delta master = square_delta::ZERO;
+    for(auto& t : d) t = square_delta::ZERO;
+    u8 reps = 0;
+    s8 n;
+    // go back through move history
+    for(n = 0; n < (s8)hm; n += 1)
+    {
+        move mv = (n < (s8)state_index ?
+            stack_base()[state_index - n].lastmove :
+            get_rep_move(n - state_index));
+        square x = mv.nonflag_fr();
+        square y = mv.nonflag_to();
+        square_delta md = y - x;
+        master += md;
+        piece_index i = square_to_index(y);
+        d[i.x - 32] += md;
+        CH2K_ASSERT(!square_to_index(y).is_nothing());
+        CH2K_ASSERT(square_to_index(x).is_nothing());
+        square_to_index(x) = square_to_index(y);
+        square_to_index(y) = piece_index::NOTHING;
+        index_to_square(i) = x;
+        if(master.is_zero())
+        {
+            bool repetition = true;
+            for(u8 j = 0; j < 64; ++j)
+            {
+                // check if piece has returned to original position
+                if(!d[j].is_zero())
+                {
+                    // if not, check if swapped places with identical piece
+                    piece_index ji{ u8(j + 32) };
+                    square other_sq = index_to_square(ji) + d[j];
+                    if(!other_sq.is_nowhere())
+                    {
+                        piece_index other = square_to_index(other_sq);
+                        if(!other.is_nothing() && index_to_piece(ji) == index_to_piece(other))
+                            continue;
+                    }
+                    repetition = false;
+                    break;
+                }
+            }
+            if((n & 1) && repetition && ++reps >= 2)
+            {
+                ++n;
+                break;
+            }
+        }
+    }
+    --n;
+    // restore board state
+    for(; n >= 0; n -= 1)
+    {
+        move mv = (n < (s8)state_index ?
+            stack_base()[state_index - n].lastmove :
+            get_rep_move(n - state_index));
+        square x = mv.nonflag_fr();
+        square y = mv.nonflag_to();
+        piece_index i = square_to_index(x);
+        CH2K_ASSERT(square_to_index(y).is_nothing());
+        CH2K_ASSERT(!square_to_index(x).is_nothing());
+        square_to_index(y) = square_to_index(x);
+        square_to_index(x) = piece_index::NOTHING;
+        index_to_square(i) = y;
+    }
+    return reps;
+}
+
+bool game::check_draw_material()
+{
+    return
+        check_draw_material_side(piece_color::W) ||
+        check_draw_material_side(piece_color::B);
+}
+
+bool game::check_draw_material_side(piece_color c)
+{
+    u8 const pa = pval(c);
+    u8 const pb = pval(c.opposite());
+    if(pb == 0)
+    {
+        if(pa == 0) return true;
+        for(auto i : pawns(c))
+            if(!index_to_square(i).is_nowhere())
+                return false;
+        if(pa < 5) return true;
+        if(pa == 6)
+        {
+            // KNNK
+            bool one_piece = false;
+            for(auto i : knights(c))
+            {
+                if(index_to_square(i).is_nowhere()) continue;
+                if(one_piece) return true;
+                one_piece = true;
+            }
+        }
+        // TODO: KBBK with same color bishops
+    }
+    return false;
+}
+
+u8 game::check_status()
+{
+    u8 n = gen_moves(&mvs_[0]); // update in_check even if not used
+    if(check_draw_50move()) return STATUS_DRAW_50MOVE;
+    if(check_draw_material()) return STATUS_DRAW_MATERIAL;
+    if(check_draw_repetition() >= 2) return STATUS_DRAW_REPETITION;
+    if(n > 0) return in_check ? STATUS_CHECK : STATUS_NORMAL;
+    if(in_check) return STATUS_MATED;
+    return STATUS_DRAW_STALEMATE;
+}
+
+bool game::endgame_side(piece_color c, score& s, u8 depth)
+{
+    u8 const pa = pval(c);
+    u8 const pb = pval(c.opposite());
+    if(pb == 0)
+    {
+        if(pa == 0)
+            return (s = SCORE_DRAW), true;
+        // count pieces
+        u8 nknig, nslid[3], bishc;
+        for(auto i : pawns(c))
+            if(!index_to_square(i).is_nowhere())
+                return false;
+        if(pa <= 3)
+            return (s = SCORE_DRAW), true;
+        if(pa < 5)
+            return false;
+        nknig = 0;
+        nslid[0] = nslid[1] = nslid[2] = 0;
+        bishc = 0;
+        for(auto i : knights(c))
+            if(!index_to_square(i).is_nowhere())
+                ++nknig;
+        for(auto i : sliders(c))
+        {
+            square s = index_to_square(i);
+            if(s.is_nowhere()) continue;
+            piece_type t = index_to_piece(i).type();
+            ++nslid[t.x - 4];
+            if(t == piece_type::BISHOP)
+                bishc |= (s.square_color() + 1);
+        }
+        if(pa == 6 && nknig == 2)
+            return (s = SCORE_DRAW), true;
+        square ka = index_to_square(king(c));
+        square kb = index_to_square(king(c.opposite()));
+        u8 kbr = kb.row();
+        u8 kbc = kb.col();
+        u8 king_separation =
+            tabs(s8(ka.row()) - s8(kbr)) +
+            tabs(s8(ka.col()) - s8(kbc));
+        u8 kb_edge_dist;
+        if(pa == 6 && nknig == 1)
+        {
+            CH2K_ASSERT(nslid[0] == 1);
+            CH2K_ASSERT(bishc != 0);
+            // KBNK
+            if(!(bishc & 1)) // bishop on light square
+            {
+                kb_edge_dist = tmin<u8>(
+                    14 - kbr - kbc,
+                    kbr + kbc);
+            }
+            else // bishop on dark square
+            {
+                kb_edge_dist = tmin<u8>(
+                    7 - kbr + kbc,
+                    7 + kbr - kbc);
+            }
+        }
+        else
+        {
+            kb_edge_dist =
+                tabs(7 - s8(kbr * 2)) +
+                tabs(7 - s8(kbc * 2));
+        }
+        s = score(pa) * 128 + kb_edge_dist * 32 - king_separation * 16;
+        return true;
+    }
+    return false;
+}
+
+bool game::endgame(score& s, u8 depth)
+{
+    if(endgame_side(c_, s, depth)) return true;
+    if(endgame_side(c_.opposite(), s, depth)) return (s = -s), true;
+    return false;
+}
+
+score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
+{
+#if CH2K_MAX_MOVE_STACK
+    max_move_stack_ = tmax(max_move_stack_, uint16_t(m - &mvs_[0]));
+#endif
+    if(check_draw_50move()) return SCORE_DRAW;
+    if(check_draw_material()) return SCORE_DRAW;
+    if(check_draw_repetition() >= 2) return SCORE_DRAW;
+    if(nodes_ > max_nodes_) return 0;
+    if(depth >= max_depth)
+    {
+        // qsearch has the danger of exceeding low node limits
+        // at depth 1 for noisy positions
+        //if(depth == 1)
+        //    return eval_relative_with_see();
+        //else
+            return qsearch(m, a, b, depth);
+        //return eval_relative_with_see();
+    }
+    u8 n = gen_moves(m);
+#if CH2K_MAX_MOVE_STACK
+    if(n == GEN_MOVES_OUT_OF_MEM) max_move_stack_ = MOVEGEN_STACK_SIZE;
+#endif
+    if(n == GEN_MOVES_OUT_OF_MEM) return eval_relative_with_see();
+    if(n == 0) return in_check ? SCORE_LOSS + depth : SCORE_DRAW;
+    score v = SCORE_LOSS;
+
+    // some weird pruning
+    //if(!in_check && depth == max_depth - 1)
+    //{
+    //    score f = eval_relative_with_see();
+    //    if(f + 50 <= a)
+    //        return a;
+    //}
+
+    u8 badcaps = order_moves(m, n, depth);
+    //if(in_check) ++max_depth;
+    for(u8 i = 0; i < n; ++i)
+    {
+        do_move(m[i]);
+        //u8 md = i > 12 ? max_depth - 1 : max_depth;
+        u8 md = max_depth;
+        //if(i >= badcaps) --md;
+        v = tmax<score>(v, -negamax(m + n, -b, -a, depth + 1, md));
+        undo_move(m[i]);
+        a = tmax<score>(a, v);
+        if(a >= b)
+            break;
+    }
+    return v;
+}
+
+score game::negamax_root(score a, score b)
+{
+    u8 n = gen_moves(&mvs_[0]);
+    best_ = move::NO_MOVE;
+    if(n == 0)
+        return in_check ? SCORE_LOSS : SCORE_DRAW;
+    score v;
+    v = SCORE_LOSS;
+    order_moves(&mvs_[0], n, 0);
+    for(u8 i = 0; i < n; ++i)
+    {
+        do_move(mvs_[i]);
+        v = tmax<score>(v, -negamax(&mvs_[n], -b, -a, 1, max_depth_));
+        undo_move(mvs_[i]);
+        if(v > a)
+        {
+            best_ = mvs_[i];
+            a = v;
+        }
+    }
+    return v;
+}
+
+score game::aspiration_window(u8 depth, score prev_score)
+{
+    static constexpr int8_t const ASPIRATION_MIN_DEPTH = 2;
+    static constexpr score const ASPIRATION_BASE_DELTA = 10000;
+
+    score delta = ASPIRATION_BASE_DELTA;
+    score a = depth < ASPIRATION_MIN_DEPTH ? SCORE_LOSS :
+        tmax<score>(SCORE_LOSS, prev_score - delta);
+    score b = depth < ASPIRATION_MIN_DEPTH ? SCORE_WIN :
+        tmin<score>(SCORE_WIN, prev_score + delta);
+
+    while(1 || !stop_)
+    {
+        max_depth_ = depth;
+        move best = best_;
+        score v = negamax_root(a, b);
+
+        if(nodes_ > max_nodes_)
+        {
+            best_ = best;
+            return 0;
+        }
+
+        if(v > a && v < b)
+            return v;
+        best_ = best;
+
+        if(v <= a)
+        {
+            b = (a + b) / 2;
+            a = tmax<score>(SCORE_LOSS, a - delta);
+        }
+
+        if(v >= b)
+        {
+            b = tmin<score>(SCORE_WIN, b + delta);
+        }
+
+        delta = delta + delta / 4 + 5;
+    }
+
+    return 0;
+}
+
+void game::iterative_deepening()
+{
+    score_ = 0;
+    nodes_ = 0;
+    depth_ = 0;
+    best_ = move::NO_MOVE;
+    u8 depth = 1;
+    u8 max_depth = max_depth_;
+    //score prev_score = eval_relative();
+    while(depth <= max_depth && nodes_ < max_nodes_)
+    {
+        //prev_score = aspiration_window(depth, prev_score);
+        move best = best_;
+        max_depth_ = depth;
+        score s = negamax_root(SCORE_LOSS, SCORE_WIN);
+        if(nodes_ < max_nodes_)
+        {
+            depth_ = depth;
+            score_ = s;
+        }
+        else if(!best.is_nothing())
+            best_ = best;
+        else
+            break;
+        ++depth;
+        if(depth < max_depth && nodes_ * 128 <= max_nodes_)
+            ++depth;
+    }
+    max_depth_ = max_depth;
+}
+
+score game::eval_side(bool is_white)
+{
+    bool const flip = !is_white;
+    piece_color const c =
+        is_white ? piece_color::W : piece_color::B;
+#if CH2K_TUNABLE_EVAL
+    score const gradf = is_white ? score(1) : score(-1);
+#endif
+    score r = 0;
+    u8 num_pawns = 0;
+    bool has_piece;
+
+    // analyze enemy pawn formation for passed pawn analysis
+    u8 epr[10];
+    for(u8 i = 0; i < 10; ++i)
+        epr[i] = is_white ? 7 : 0;
+    for(auto i : pawns(c.opposite()))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        ++num_pawns;
+        u8 c = x.col();
+        if(is_white)
+            epr[c + 1] = tmin(epr[c + 1], x.row());
+        else
+            epr[c + 1] = tmax(epr[c + 1], x.row());
+    }
+
+    // piece-square tables
+    square_delta const forward = c.forward();
+    for(auto i : pawns(c))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        ++num_pawns;
+        u8 t = x.table_index(flip);
+        r += CH2K_GET_EVAL_SETTING(pawn[t]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.pawn[t] += gradf;
+#endif
+        bool connected = false;
+        t = x.table_col_index();
+        //connected pawns
+        if(square_to_index(x - forward + square_delta::WEST).is_pawn_of_color(c) ||
+            square_to_index(x - forward + square_delta::EAST).is_pawn_of_color(c))
+        {
+            r += CH2K_GET_EVAL_SETTING(connected_pawn[t]);
+#if CH2K_TUNABLE_EVAL
+            eval_gradient_.v.connected_pawn[t] += gradf;
+#endif
+            connected = true;
+        }
+        // passed pawns
+        {
+            u8 row = x.row();
+            u8 c = x.col();
+            if((!is_white && row >= epr[c] && row >= epr[c + 1] && row >= epr[c + 2]) ||
+                (is_white && row <= epr[c] && row <= epr[c + 1] && row <= epr[c + 2]))
+            {
+                r += CH2K_GET_EVAL_SETTING(passed_pawn[t]);
+#if CH2K_TUNABLE_EVAL
+                eval_gradient_.v.passed_pawn[t] += gradf;
+#endif
+                if(connected)
+                {
+                    r += CH2K_GET_EVAL_SETTING(connected_passed_pawn[t]);
+#if CH2K_TUNABLE_EVAL
+                    eval_gradient_.v.connected_passed_pawn[t] += gradf;
+#endif
+                }
+            }
+        }
+    }
+    num_pawns = tmin<u8>(num_pawns, 15);
+    has_piece = false;
+    for(auto i : knights(c))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        u8 t = x.table_index(flip);
+        r += CH2K_GET_EVAL_SETTING(knight[t]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.knight[t] += gradf;
+#endif
+        // knight outpost
+        if(square_to_index(x - forward + square_delta::WEST).is_pawn_of_color(c) ||
+            square_to_index(x - forward + square_delta::EAST).is_pawn_of_color(c))
+        {
+            t = x.table_col_index();
+            r += CH2K_GET_EVAL_SETTING(knight_outpost[t]);
+#if CH2K_TUNABLE_EVAL
+            eval_gradient_.v.knight_outpost[t] += gradf;
+#endif
+        }
+        r += CH2K_GET_EVAL_SETTING(knight_pawn_bonus[num_pawns]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.knight_pawn_bonus[num_pawns] += gradf;
+#endif
+        if(has_piece)
+        {
+            r += CH2K_GET_EVAL_SETTING(knight_pair);
+#if CH2K_TUNABLE_EVAL
+            eval_gradient_.v.knight_pair += gradf;
+#endif
+        }
+        has_piece = true;
+    }
+
+    square ek = index_to_square(king(c.opposite()));
+    u8 bishop_colors = 0;
+    has_piece = false;
+    for(auto i : sliders(c))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        u8 t = x.table_index(flip);
+        piece_type pt = index_to_piece(i).type();
+        u8 a = pt.x - piece_type::B_;
+        r += CH2K_GET_EVAL_SETTING(sliders[a][t]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.sliders[a][t] += gradf;
+#endif
+
+        // sliders align with enemy king
+        if(pt.can_cap_delta(ek - x))
+        {
+            r += CH2K_GET_EVAL_SETTING(sliders_align_to_king[a]);
+#if CH2K_TUNABLE_EVAL
+            eval_gradient_.v.sliders_align_to_king[a] += gradf;
+#endif
+        }
+        
+        // rook/queen on [semi]open file
+        if(pt.is_orthogonal_slider())
+        {
+            if(pt == piece_type::ROOK)
+            {
+                r += CH2K_GET_EVAL_SETTING(rook_pawn_bonus[num_pawns]);
+#if CH2K_TUNABLE_EVAL
+                eval_gradient_.v.rook_pawn_bonus[num_pawns] += gradf;
+#endif
+                if(has_piece)
+                {
+                    r += CH2K_GET_EVAL_SETTING(rook_pair);
+#if CH2K_TUNABLE_EVAL
+                    eval_gradient_.v.rook_pair += gradf;
+#endif
+                }
+                has_piece = true;
+            }
+            bool semi = true, open = true;
+            x.clear_row();
+            for(u8 n = 0; n < 8; ++n)
+            {
+                if(square_to_index(x).is_pawn_of_color(c))
+                {
+                    semi = open = false;
+                    break;
+                }
+                if(square_to_index(x).is_pawn_of_color(c.opposite()))
+                    open = false;
+                x += square_delta::SOUTH;
+            }
+            if(open)
+            {
+                t = x.table_col_index();
+                r += CH2K_GET_EVAL_SETTING(rook_on_open_file[t]);
+#if CH2K_TUNABLE_EVAL
+                eval_gradient_.v.rook_on_open_file[t] += gradf;
+#endif
+            }
+            else if(semi)
+            {
+                t = x.table_col_index();
+                r += CH2K_GET_EVAL_SETTING(rook_on_semi_open_file[t]);
+#if CH2K_TUNABLE_EVAL
+                eval_gradient_.v.rook_on_semi_open_file[t] += gradf;
+#endif
+            }
+        }
+        else // piece is a bishop
+        {
+            bishop_colors |= (x.square_color() + 1);
+        }
+    }
+    if(!(bishop_colors ^ 3))
+    {
+        r += CH2K_GET_EVAL_SETTING(bishop_pair);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.bishop_pair += gradf;
+#endif
+    }
+    {
+        square ks = index_to_square(king(c));
+        u8 t = ks.table_index(flip);
+        r += CH2K_GET_EVAL_SETTING(king[t]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.king[t] += gradf;
+#endif
+        t = 0;
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
+            square x = ks;
+            while(square_to_index(x += d).is_not_of_color(c))
+                ++t;
+        }
+        t = tmin<u8>(t, 12);
+        r += CH2K_GET_EVAL_SETTING(king_vmob[t]);
+#if CH2K_TUNABLE_EVAL
+        eval_gradient_.v.king_vmob[t] += gradf;
+#endif
+    }
+
+    return r;
+}
+
+void game::do_null_move()
+{
+    auto& st = stack_push();
+    square k = index_to_square(king(c_));
+    st.lastmove.clear_set_fr(k).clear_set_to(k);
+    c_ = c_.opposite();
+}
+
+void game::undo_null_move()
+{
+    c_ = c_.opposite();
+    stack_pop();
+}
+
+void game::do_move(move m)
+{
+    CH2K_ASSERT(!m.is_nothing());
+
+    auto& st = stack_push();
+    st.lastmove = m;
+    st.half_move = move_is_reversible(m) ? st.half_move + 1 : 0;
+    square x = m.fr();
+    square y = m.to();
+    piece_index pc = square_to_index(x);
+    piece_index cap = square_to_index(y);
+
+    CH2K_ASSERT(!pc.is_nothing());
+
+    if(!cap.is_nothing())
+        pval(c_.opposite()) -= pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
+
+    st.cap = cap;
+    st.flags &= pgm_read_byte(&CASTLING_SPOILERS[x.x]);
+    st.flags &= pgm_read_byte(&CASTLING_SPOILERS[y.x]);
+
+    if(m.is_non_dmove_special())
+    {
+        if(m.is_promotion())
+        {
+            piece_type t = m.promotion_piece_type();
+            index_to_piece(pc) = piece::NOTHING;
+            index_to_square(pc) = square::NOWHERE;
+            if(t != piece_type::KNIGHT)
+            {
+                pc = (set_first_slider(c_) -= 1);
+                index_to_piece(pc) = piece::from_type_color(t, c_);
+            }
+            else
+            {
+                pc = last_knight(c_);
+                set_last_knight(c_) += 1;
+                index_to_piece(pc) = piece::from_type_color(piece_type::KNIGHT, c_);
+            }
+            pval(c_) += pgm_read_byte(&PVALS[t.x]) - PVALS[1];
+        }
+        else if(m.is_castle())
+        {
+            if(y < x) // queenside
+            {
+                st.cap = square_to_index(x + square_delta::WEST * 4);
+                square_to_index(x + square_delta::WEST) = st.cap;
+                square_to_index(x + square_delta::WEST * 4) = piece_index::NOTHING;
+                index_to_square(st.cap) = x + square_delta::WEST;
+            }
+            else // kingside
+            {
+                st.cap = square_to_index(x + square_delta::EAST * 3);
+                square_to_index(x + square_delta::EAST) = st.cap;
+                square_to_index(x + square_delta::EAST * 3) = piece_index::NOTHING;
+                index_to_square(st.cap) = x + square_delta::EAST;
+            }
+        }
+        else if(m.is_en_passant())
+        {
+            // remove captured pawn
+            square epcap = y - c_.forward();
+            piece_index eppc = st.cap = square_to_index(epcap);
+            square_to_index(epcap) = piece_index::NOTHING;
+            index_to_square(eppc) = square::NOWHERE;
+            pval(c_.opposite()) -= PVALS[1];
+        }
+    }
+
+    square_to_index(y) = pc;
+    square_to_index(x) = piece_index::NOTHING;
+    index_to_square(pc) = y;
+    index_to_square(cap) = square::NOWHERE;
+
+    c_ = c_.opposite();
+}
+
+void game::undo_move(move m)
+{
+    c_ = c_.opposite();
+
+    square x = m.fr();
+    square y = m.to();
+    piece_index pc = square_to_index(y);
+    piece_index cap = stack_pop().cap;
+
+    if(m.is_non_dmove_special())
+    {
+        if(m.is_promotion())
+        {
+            pval(c_) -= pgm_read_byte(&PVALS[index_to_piece(pc).type().x]) - PVALS[1];
+            index_to_piece(pc) = piece::NOTHING;
+            index_to_square(pc) = square::NOWHERE;
+            if(pc < last_knight(c_))
+                set_last_knight(c_) -= 1;
+            else
+                set_first_slider(c_) += 1;
+            for(auto i : pawns(c_))
+                if(index_to_piece(i).is_nothing())
+                {
+                    pc = i;
+                    index_to_piece(i) = piece::pawn(c_);
+                    break;
+                }
+        }
+        else if(m.is_castle())
+        {
+            if(y < x) // queenside
+            {
+                square_to_index(x + square_delta::WEST * 4) = cap;
+                square_to_index(x + square_delta::WEST) = piece_index::NOTHING;
+                index_to_square(cap) = x + square_delta::WEST * 4;
+            }
+            else // kingside
+            {
+                square_to_index(x + square_delta::EAST * 3) = cap;
+                square_to_index(x + square_delta::EAST) = piece_index::NOTHING;
+                index_to_square(cap) = x + square_delta::EAST * 3;
+            }
+            cap = piece_index::NOTHING;
+        }
+        else if(m.is_en_passant())
+        {
+            // restore captured pawn
+            square epcap = y - c_.forward();
+            square_to_index(epcap) = cap;
+            index_to_square(cap) = epcap;
+            pval(c_.opposite()) += PVALS[1];
+            cap = piece_index::NOTHING;
+        }
+    }
+
+    if(!cap.is_nothing())
+        pval(c_.opposite()) += pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
+
+    square_to_index(x) = pc;
+    index_to_square(pc) = x;
+
+    // handle flags here
+
+    square_to_index(y) = cap;
+    index_to_square(cap) = y;
+}
+
+stack_str<6> move::uci_str() const
+{
+    stack_str<6> r;
+    r.at(0) = fr().col_char();
+    r.at(1) = fr().row_char();
+    r.at(2) = to().col_char();
+    r.at(3) = to().row_char();
+    r.at(4) = is_promotion() ? promotion_piece_type().uci_char() : '\0';
+    r.at(5) = '\0';
+    return r;
+}
+
+void game::load_game_data(u8 const* d)
+{
+#if CH2K_MAX_MOVE_STACK
+    max_move_stack_ = 0;
+#endif
+    rep_move_head_ = 0;
+    for(auto& b : square_to_index_) b = piece_index::GUARD;
+    for(auto& p : index_to_piece_) p = piece::NOTHING;
+    for(auto& s : index_to_square_) s = square::NOWHERE;
+    index_to_piece_[64] = piece::GUARD;
+
+    set_last_knight(piece_color::W) = first_knight(piece_color::W);
+    set_first_slider(piece_color::W) = last_slider(piece_color::W);
+    set_last_knight(piece_color::B) = first_knight(piece_color::B);
+    set_first_slider(piece_color::B) = last_slider(piece_color::B);
+
+    state_index = 0;
+    stack().flags = 0;
+    stack().half_move = 0;
+
+    c_ = piece_color::W;
+
+    pval(piece_color::W) = 0;
+    pval(piece_color::B) = 0;
+    for(u8 i = 0; i < 32; ++i)
+    {
+        square s = square::from_rowcol(i >> 2, (i & 3) * 2);
+        u8 pp = pgm_read_byte(d++);
+        add_game_data_piece(s, pp >> 4);
+        add_game_data_piece(s + square_delta::EAST, pp & 0xf);
+    }
+
+    // by default set last move to king
+    stack().lastmove = move{}.clear_set_to(index_to_square(king(c_.opposite())));
+
+    // find if king is in contact check, set last move to be checker
+    {
+        square x = index_to_square(king(c_));
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
+            square y = x - d;
+            piece_index i = square_to_index(y);
+            if(i.is_nothing()) continue;
+            if(i.is_of_color(c_)) continue;
+            if(index_to_piece(i).type().can_cap_delta_contact(d))
+                stack().lastmove.clear_set_to(y);
+        }
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KNIGHT_MOVES[j]) };
+            square y = x - d;
+            piece_index i = square_to_index(y);
+            if(i.is_nothing()) continue;
+            if(i.is_of_color(c_)) continue;
+            if(index_to_piece(i).type() == piece_type::KNIGHT)
+                stack().lastmove.clear_set_to(y);
+        }
+    }
+}
+
+void game::load_fen(char const* fen)
+{
+#if CH2K_MAX_MOVE_STACK
+    max_move_stack_ = 0;
+#endif
+    for(auto& m : rep_moves_) m = move::NO_MOVE;
+    rep_move_head_ = 0;
+    for(auto& b : square_to_index_) b = piece_index::GUARD;
+    for(auto& p : index_to_piece_) p = piece::NOTHING;
+    for(auto& s : index_to_square_) s = square::NOWHERE;
+    index_to_piece_[64] = piece::GUARD;
+
+    set_last_knight(piece_color::W) = first_knight(piece_color::W);
+    set_first_slider(piece_color::W) = last_slider(piece_color::W);
+    set_last_knight(piece_color::B) = first_knight(piece_color::B);
+    set_first_slider(piece_color::B) = last_slider(piece_color::B);
+
+    // board
+    char c;
+    square x = square::from_rowcol(0, 0);
+    pval(piece_color::W) = 0;
+    pval(piece_color::B) = 0;
+    while(' ' != (c = *fen++) && c)
+    {
+        switch(c)
+        {
+        case 'p': pval(piece_color::B) += PVALS[1]; add_pawn  (x, piece_color::B); x += square_delta::EAST; break;
+        case 'n': pval(piece_color::B) += PVALS[3]; add_knight(x, piece_color::B); x += square_delta::EAST; break;
+        case 'b': pval(piece_color::B) += PVALS[4]; add_slider(x, piece_color::B, piece_type::BISHOP); x += square_delta::EAST; break;
+        case 'r': pval(piece_color::B) += PVALS[5]; add_slider(x, piece_color::B, piece_type::ROOK); x += square_delta::EAST; break;
+        case 'q': pval(piece_color::B) += PVALS[6]; add_slider(x, piece_color::B, piece_type::QUEEN); x += square_delta::EAST; break;
+        case 'k': pval(piece_color::B) += PVALS[7]; add_king  (x, piece_color::B); x += square_delta::EAST; break;
+        case 'P': pval(piece_color::W) += PVALS[1]; add_pawn(x, piece_color::W); x += square_delta::EAST; break;
+        case 'N': pval(piece_color::W) += PVALS[3]; add_knight(x, piece_color::W); x += square_delta::EAST; break;
+        case 'B': pval(piece_color::W) += PVALS[4]; add_slider(x, piece_color::W, piece_type::BISHOP); x += square_delta::EAST; break;
+        case 'R': pval(piece_color::W) += PVALS[5]; add_slider(x, piece_color::W, piece_type::ROOK); x += square_delta::EAST; break;
+        case 'Q': pval(piece_color::W) += PVALS[6]; add_slider(x, piece_color::W, piece_type::QUEEN); x += square_delta::EAST; break;
+        case 'K': pval(piece_color::W) += PVALS[7]; add_king  (x, piece_color::W); x += square_delta::EAST; break;
+        case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8':
+            for(u8 n = 0; n < u8(c - '0'); ++n)
+            {
+                square_to_index(x) = piece_index::NOTHING;
+                x += square_delta::EAST;
+            }
+            break;
+        case '/':
+            x += square_delta{ 8 };
+            break;
+        default:
+            break;
+        }
+    }
+
+    // side to move
+    c_ = piece_color::W;
+    while(' ' != (c = *fen++) && c)
+    {
+        switch(c)
+        {
+        case 'w': case 'W': c_ = piece_color::W; break;
+        case 'b': case 'B': c_ = piece_color::B; break;
+        default: break;
+        }
+    }
+
+    state_index = 0;
+
+    // castling
+    stack().flags = 0;
+    while(' ' != (c = *fen++) && c)
+    {
+        switch(c)
+        {
+        case 'K': stack().flags |= CASTLE_WK; break;
+        case 'Q': stack().flags |= CASTLE_WQ; break;
+        case 'k': stack().flags |= CASTLE_BK; break;
+        case 'q': stack().flags |= CASTLE_BQ; break;
+        default: break;
+        }
+    }
+
+    // by default set last move to king
+    stack().lastmove = move{}.clear_set_to(index_to_square(king(c_.opposite())));
+
+    // find if king is in contact check, set last move to be checker
+    {
+        x = index_to_square(king(c_));
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
+            square y = x - d;
+            piece_index i = square_to_index(y);
+            if(i.is_nothing()) continue;
+            if(i.is_of_color(c_)) continue;
+            if(index_to_piece(i).type().can_cap_delta_contact(d))
+                stack().lastmove.clear_set_to(y);
+        }
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KNIGHT_MOVES[j]) };
+            square y = x - d;
+            piece_index i = square_to_index(y);
+            if(i.is_nothing()) continue;
+            if(i.is_of_color(c_)) continue;
+            if(index_to_piece(i).type() == piece_type::KNIGHT)
+                stack().lastmove.clear_set_to(y);
+        }
+    }
+
+    // en passant pawn
+    while(' ' != (c = *fen++) && c)
+    {
+        if(c >= 'a' && c <= 'h')
+        {
+            x = square::from_rowcol(u8('8' - *fen), u8(c - 'a'));
+            stack().lastmove =
+                move{}.clear_set_to(x - c_.forward()).set_pawn_dmove();
+            break;
+        }
+    }
+
+    stack().half_move = 0;
+}
+
+bool game::en_passant_pinned(square king, square sa, square sb)
+{
+    if(king.row() != sa.row())
+        return false;
+    square x = king;
+    piece_index i;
+    if(king < sa)
+    {
+        while(square_to_index(x += square_delta::EAST).is_nothing())
+            ;
+        if(x != sa) return false;
+        x = sb;
+        while((i = square_to_index(x += square_delta::EAST)).is_nothing())
+            ;
+        return i.is_not_of_color(c_) && index_to_piece(i).type().can_cap_orthogonal();
+    }
+    else
+    {
+        while(square_to_index(x += square_delta::WEST).is_nothing())
+            ;
+        if(x != sb) return false;
+        x = sa;
+        while((i = square_to_index(x += square_delta::WEST)).is_nothing())
+            ;
+        return i.is_not_of_color(c_) && index_to_piece(i).type().can_cap_orthogonal();
+    }
+}
+
+static move* add_pawn_move(move* r, move mv, uint8_t pro_row)
+{
+    if(mv.to().row() != pro_row)
+        *r++ = mv;
+    else
+    {
+        mv.set_promotion();
+        *r++ = mv.clear_set_promotion_piece_type(piece_type::QUEEN);
+        *r++ = mv.clear_set_promotion_piece_type(piece_type::KNIGHT);
+        *r++ = mv.clear_set_promotion_piece_type(piece_type::ROOK);
+        *r++ = mv.clear_set_promotion_piece_type(piece_type::BISHOP);
+    }
+    return r;
+}
+
+u8 game::gen_moves(move* m)
+{
+    move* r = m;
+
+    move* const m28 = &mvs_[MOVEGEN_STACK_SIZE - 28];
+    move* const m14 = &mvs_[MOVEGEN_STACK_SIZE - 14];
+    move* const m8 = &mvs_[MOVEGEN_STACK_SIZE - 8];
+    move* const m_out_of_mem = m + MOVEGEN_STACK_SIZE;
+
+    auto const my_color = c_;
+    auto const enemy_color = my_color.opposite();
+    auto const forward = my_color.forward();
+
+    u8 const pawn_row_base = my_color.pawn_base_row();
+    u8 const pawn_row_pro = my_color.promotion_row();
+
+    move mv;
+
+    square const king_pos = index_to_square(king(my_color));
+
+    in_check = 0;
+    square checker = square::NOWHERE;
+    square_delta check_dir;
+
+    // pinned piece temp stack
+    square pin_sq[12];
+    piece_index pin_index[12];
+    u8 pin_st = 0;
+
+    // locate pinned pieces
+    for(piece_index i : sliders(enemy_color))
+    {
+        square const enemy_pos = index_to_square(i);
+        if(enemy_pos.is_nowhere()) continue;
+        piece pc = index_to_piece(i);
+        piece_type const pt = pc.type();
+        square_delta const d = enemy_pos - king_pos;
+        if(!pt.can_cap_delta_distant(d)) continue;
+        square_delta const v = d.vec();
+        piece_index pci;
+        square x = king_pos;
+        while((pci = square_to_index(x += v)).is_nothing())
+            ;
+        pc = index_to_piece(pci);
+        if(x == enemy_pos)
+        {
+            in_check += 2;
+            checker = enemy_pos;
+            check_dir = v;
+        }
+        else if(pc.is_of_color(my_color))
+        {
+            if(r >= m8) goto out_of_mem;
+            square y = x;
+            while(square_to_index(y += v).is_nothing())
+                ;
+            if(y == enemy_pos)
+            {
+                // piece at x is pinned!
+                pin_sq[pin_st] = x;
+                index_to_square(pci) = square::NOWHERE;
+                pin_index[pin_st++] = pci;
+
+                // generate moves along pin
+                mv.clear_set_fr(x);
+                if(pc.is_pawn())
+                {
+                    y = x + forward;
+                    mv.clear_set_to(y);
+                    if(v.is_vertical())
+                    {
+                        if(square_to_index(y).is_nothing())
+                        {
+                            //*r++ = mv.clear_set_to(y);
+                            r = add_pawn_move(r, mv.clear_set_to(y), pawn_row_pro);
+                            y += forward;
+                            if(square_to_index(y).is_nothing() && x.row() == pawn_row_base)
+                                *r++ = mv.clear_set_to(y).set_pawn_dmove();
+                        }
+                    }
+                    else
+                    {
+                        y += square_delta::WEST;
+                        if(y == enemy_pos)
+                            //*r++ = mv.clear_set_to(y);
+                            r = add_pawn_move(r, mv.clear_set_to(y), pawn_row_pro);
+                        y += square_delta::EAST * 2;
+                        if(y == enemy_pos)
+                            //*r++ = mv.clear_set_to(y);
+                            r = add_pawn_move(r, mv.clear_set_to(y), pawn_row_pro);
+                    }
+                }
+                else if(pc.type().can_cap_delta(d))
+                {
+                    y = x;
+                    do
+                    {
+                        y += v;
+                        *r++ = mv.clear_set_to(y);
+                    } while(y != enemy_pos);
+                    y = x;
+                    while((y -= v) != king_pos)
+                        *r++ = mv.clear_set_to(y);
+                }
+            }
+        }
+    }
+
+    {
+        square y = stack().lastmove.to();
+        square_delta d = king_pos - y;
+        if(square_to_piece(y).type().can_cap_delta_contact(d))
+        {
+            checker = y;
+            ++in_check;
+            check_dir = d.reversed().vec();
+        }
+    }
+
+    if(in_check)
+    {
+        r = m;
+        if(in_check > 2) goto king_moves;
+        if(checker == stack().lastmove.to())
+            goto en_passant_moves;
+        goto regular_moves;
+    }
+
+    // generate castlings
+    {
+        if(r >= m8) goto out_of_mem;
+        auto f = stack().flags;
+        if((f & castle_q(my_color)) &&
+            square_to_index(king_pos + square_delta::WEST).is_nothing() &&
+            square_to_index(king_pos + square_delta::WEST * 2).is_nothing() &&
+            square_to_index(king_pos + square_delta::WEST * 3).is_nothing() &&
+            !capturable(enemy_color, king_pos + square_delta::WEST) &&
+            !capturable(enemy_color, king_pos + square_delta::WEST * 2))
+        {
+            *r++ = mv.clear_set_fr(king_pos).
+                clear_set_to(king_pos + square_delta::WEST * 2).set_castle();
+        }
+        if((f & castle_k(my_color)) &&
+            square_to_index(king_pos + square_delta::EAST).is_nothing() &&
+            square_to_index(king_pos + square_delta::EAST * 2).is_nothing() &&
+            !capturable(enemy_color, king_pos + square_delta::EAST) &&
+            !capturable(enemy_color, king_pos + square_delta::EAST * 2))
+        {
+            *r++ = mv.clear_set_fr(king_pos).
+                clear_set_to(king_pos + square_delta::EAST * 2).set_castle();
+        }
+    }
+
+en_passant_moves:
+    if(r >= m8) goto out_of_mem;
+    if(stack().lastmove.is_pawn_dmove())
+    {
+        square y = stack().lastmove.to();
+        if(in_check && y != checker)
+            goto regular_moves;
+        square x = y + square_delta::WEST;
+        piece_index i = square_to_index(x);
+        if(i.is_pawn_of_color(my_color) &&
+            !index_to_square(i).is_nowhere() &&
+            !en_passant_pinned(king_pos, x, y))
+        {
+            *r++ = mv.clear_set_fr(x).clear_set_to(y + forward).set_en_passant();
+        }
+        x += square_delta::EAST * 2;
+        i = square_to_index(x);
+        if(i.is_pawn_of_color(my_color) &&
+            !index_to_square(i).is_nowhere() &&
+            !en_passant_pinned(king_pos, y, x))
+        {
+            *r++ = mv.clear_set_fr(x).clear_set_to(y + forward).set_en_passant();
+        }
+    }
+
+regular_moves:
+
+    if(in_check & 1)
+    {
+        // contact check: only king move or capture
+        mv.clear_set_to(checker);
+
+        // pawns capture checker
+        {
+            square x = checker - forward;
+            x += square_delta::WEST;
+            piece_index i = square_to_index(x);
+            if(i.is_pawn_of_color(my_color) && !index_to_square(i).is_nowhere())
+                //*r++ = mv.clear_set_fr(x);
+                r = add_pawn_move(r, mv.clear_set_fr(x), pawn_row_pro);
+            x += square_delta::EAST * 2;
+            i = square_to_index(x);
+            if(i.is_pawn_of_color(my_color) && !index_to_square(i).is_nowhere())
+                //*r++ = mv.clear_set_fr(x);
+                r = add_pawn_move(r, mv.clear_set_fr(x), pawn_row_pro);
+        }
+
+        // knights capture checker
+        if(r >= m8) goto out_of_mem;
+        for(piece_index i : knights(my_color))
+        {
+            square x = index_to_square(i);
+            if(x.is_nowhere()) continue;
+            if(piece_type::KNIGHT.can_cap_delta(checker - x))
+                *r++ = mv.clear_set_fr(x);
+        }
+
+        // sliders capture checker
+        if(r >= m8) goto out_of_mem;
+        for(piece_index i : sliders(my_color))
+        {
+            square x = index_to_square(i);
+            if(x.is_nowhere()) continue;
+            piece pc = index_to_piece(i);
+            square_delta d = checker - x;
+            if(pc.type().can_cap_delta(d))
+            {
+                square_delta v = d.vec();
+                square y = x;
+                while(square_to_index(y += v).is_nothing())
+                    ;
+                if(y == checker)
+                    *r++ = mv.clear_set_fr(x);
+            }
+        }
+
+        goto king_moves;
+    }
+
+    // pawn moves
+    {
+        if(r >= m28) goto out_of_mem;
+        for(piece_index i : pawns(my_color))
+        {
+            square x = index_to_square(i);
+            if(x.is_nowhere()) continue;
+            square y = x + forward;
+            mv.clear_set_fr(x);
+            if(square_to_index(y + square_delta::WEST).is_of_color(enemy_color))
+                //*r++ = mv.clear_set_to(y + square_delta::W);
+                r = add_pawn_move(r, mv.clear_set_to(y + square_delta::WEST), pawn_row_pro);
+            if(square_to_index(y + square_delta::EAST).is_of_color(enemy_color))
+                //*r++ = mv.clear_set_to(y + square_delta::E);
+                r = add_pawn_move(r, mv.clear_set_to(y + square_delta::EAST), pawn_row_pro);
+            if(square_to_index(y).is_nothing())
+            {
+                //*r++ = mv.clear_set_to(y);
+                r = add_pawn_move(r, mv.clear_set_to(y), pawn_row_pro);
+                y += forward;
+                if(square_to_index(y).is_nothing() && x.row() == pawn_row_base)
+                {
+                    *r++ = mv.clear_set_to(y).set_pawn_dmove();
+                    // no need to clear dmove flag because it is stored
+                    // in 'to' slot and the next set_to will clear it
+                }
+            }
+        }
+    }
+
+    // knight moves
+    for(piece_index i : knights(my_color))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        if(r >= m8) goto out_of_mem;
+        mv.clear_set_fr(x);
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KNIGHT_MOVES[j]) };
+            square y = x + d;
+            if(square_to_index(y).is_not_of_color(my_color))
+                *r++ = mv.clear_set_to(y);
+        }
+    }
+
+    // bishop/rook/queen moves
+    for(piece_index i : sliders(my_color))
+    {
+        square x = index_to_square(i);
+        if(x.is_nowhere()) continue;
+        if(r >= m28) goto out_of_mem;
+        piece piece = index_to_piece(i);
+        piece_type pt = piece.type();
+        piece_index j;
+        mv.clear_set_fr(x);
+        if(pt.is_orthogonal_slider())
+        {
+            for(u8 k = 0; k < 4; ++k)
+            {
+                square_delta d{ pgm_read_byte(&square_delta::ORTHOGONAL_DIRS[k]) };
+                square y = x;
+                do
+                {
+                    j = square_to_index(y += d);
+                    if(j.is_not_of_color(my_color))
+                        *r++ = mv.clear_set_to(y);
+                } while(j.is_nothing());
+            }
+        }
+        if(pt.is_diagonal_slider())
+        {
+            for(u8 k = 0; k < 4; ++k)
+            {
+                square_delta d{ pgm_read_byte(&square_delta::DIAGONAL_DIRS[k]) };
+                square y = x;
+                do
+                {
+                    j = square_to_index(y += d);
+                    if(j.is_not_of_color(my_color))
+                        *r++ = mv.clear_set_to(y);
+                } while(j.is_nothing());
+            }
+        }
+    }
+
+    // remove moves that don't block a distant check
+    if(in_check)
+    {
+        for(move* mp = m; mp < r; ++mp)
+        {
+            square y = mp->to();
+            if((y - king_pos).vec() != check_dir)
+                *mp-- = *--r;
+            else
+            {
+                square x = king_pos;
+                do
+                {
+                    x += check_dir;
+                    if(x == y) break;
+                } while(x != checker);
+                if(x != y)
+                    *mp-- = *--r;
+            }
+        }
+    }
+
+king_moves:
+    {
+        if(m >= m8) goto out_of_mem;
+        piece_index i = king(my_color);
+        square x = index_to_square(i);
+        mv.clear_set_fr(x);
+
+        // temporarily remove king to catch moving
+        // away in the ray of a slider's attack
+        square_to_index(x) = piece_index::NOTHING;
+
+        for(u8 j = 0; j < 8; ++j)
+        {
+            square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
+            square y = x + d;
+            if(square_to_index(y).is_not_of_color(my_color))
+            {
+                if(!capturable(enemy_color, y))
+                    *r++ = mv.clear_set_to(y);
+            }
+        }
+
+        // put king back
+        square_to_index(x) = king(my_color);
+    }
+
+    // pop pieces back off of the pin stack
+    while(pin_st > 0)
+    {
+        piece_index i = pin_index[--pin_st];
+        index_to_square(i) = pin_sq[pin_st];
+    }
+
+    return u8(r - m);
+
+out_of_mem:
+
+    // pop pieces back off of the pin stack
+    while(pin_st > 0)
+    {
+        piece_index i = pin_index[--pin_st];
+        index_to_square(i) = pin_sq[pin_st];
+    }
+
+    return GEN_MOVES_OUT_OF_MEM;
+}
+
+bool game::capturable(piece_color by_col, square x)
+{
+    // pawns
+    {
+        square_delta forward = by_col.forward();
+        square y = x - forward;
+        if(square_to_index(y + square_delta::WEST).is_pawn_of_color(by_col)) return true;
+        if(square_to_index(y + square_delta::EAST).is_pawn_of_color(by_col)) return true;
+    }
+
+    // knights
+    for(piece_index i : knights(by_col))
+    {
+        square y = index_to_square(i);
+        if(y.is_nowhere()) continue;
+        if(piece_type::KNIGHT.can_cap_delta(y - x)) return true;
+    }
+
+    // sliders
+    piece_index t = square_to_index(x);
+    square_to_index(x) = piece_index::GUARD;
+    for(piece_index i : sliders(by_col))
+    {
+        square y = index_to_square(i);
+        if(y.is_nowhere()) continue;
+        piece pc = index_to_piece(i);
+        square_delta d = x - y;
+        if(pc.type().can_cap_delta(d))
+        {
+            square_delta v = d.vec();
+            while(square_to_index(y += v).is_nothing())
+                ;
+            if(y == x)
+            {
+                square_to_index(x) = t;
+                return true;
+            }
+        }
+    }
+    square_to_index(x) = t;
+
+    // king
+    return piece_type::KING.can_cap_delta(x - index_to_square(king(by_col)));
+}
+
+stack_str<128> game::str() const
+{
+    stack_str<128> rs;
+    size_t j = 0;
+    rs.copy(j, c_.is_white() ? "WHITE" : "BLACK");
+    rs.copy(j, " to move\n");
+    for(u8 r = 0; r < 8; ++r)
+    {
+        for(u8 c = 0; c < 8; ++c)
+        {
+            auto i = square_to_index(square::from_rowcol(r, c));
+            rs.at(j++) = i.is_nothing() ? ' ' : index_to_piece(i).print_char();
+        }
+        rs.at(j++) = '\n';
+    }
+    rs.at(j) = '\0';
+    return rs;
+}
+
+}
