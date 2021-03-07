@@ -136,6 +136,7 @@ using u8score = double;
 using score = s16;
 using u8score = u8;
 #endif
+
 static constexpr score const SCORE_LOSS = score(-32000);
 static constexpr score const SCORE_WIN  = score(32000);
 static constexpr score const SCORE_DRAW = score(0);
@@ -983,6 +984,7 @@ struct game
     uint8_t depth_, max_depth_;
     move best_;
     uint8_t stop_;
+    uint8_t contempt_;
 
 #if CH2K_MAX_MOVE_STACK
     uint16_t max_move_stack_;
@@ -1022,6 +1024,13 @@ struct game
     }
 
     score eval_side(bool is_white);
+
+    score draw_score() const
+    {
+        u16 c = contempt_;
+        c <<= 4;
+        return (state_index & 1) ? SCORE_DRAW + c : SCORE_DRAW - c;
+    }
 
     bool check_draw_50move();
     u8 check_draw_repetition();
@@ -1370,7 +1379,7 @@ score game::qsearch(move* m, score a, score b, u8 depth)
     if(n == GEN_MOVES_OUT_OF_MEM)
         return eval_relative_with_see();
     if(n == 0)
-        return in_check ? SCORE_LOSS + depth : SCORE_DRAW;
+        return in_check ? SCORE_LOSS + depth : draw_score();
     score stand_pat = eval_relative();
     if(stand_pat >= b)
         return b;
@@ -1531,14 +1540,14 @@ bool game::endgame_side(piece_color c, score& s, u8 depth)
     if(pb == 0)
     {
         if(pa == 0)
-            return (s = SCORE_DRAW), true;
+            return (s = draw_score()), true;
         // count pieces
         u8 nknig, nslid[3], bishc;
         for(auto i : pawns(c))
             if(!index_to_square(i).is_nowhere())
                 return false;
         if(pa <= 3)
-            return (s = SCORE_DRAW), true;
+            return (s = draw_score()), true;
         if(pa < 5)
             return false;
         nknig = 0;
@@ -1557,7 +1566,7 @@ bool game::endgame_side(piece_color c, score& s, u8 depth)
                 bishc |= (s.square_color() + 1);
         }
         if(pa == 6 && nknig == 2)
-            return (s = SCORE_DRAW), true;
+            return (s = draw_score()), true;
         square ka = index_to_square(king(c));
         square kb = index_to_square(king(c.opposite()));
         u8 kbr = kb.row();
@@ -1608,9 +1617,9 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
 #if CH2K_MAX_MOVE_STACK
     max_move_stack_ = tmax(max_move_stack_, uint16_t(m - &mvs_[0]));
 #endif
-    if(check_draw_50move()) return SCORE_DRAW;
-    if(check_draw_material()) return SCORE_DRAW;
-    if(check_draw_repetition() >= 2) return SCORE_DRAW;
+    if(check_draw_50move()) return draw_score();
+    if(check_draw_material()) return draw_score();
+    if(check_draw_repetition() >= 2) return draw_score();
     if(nodes_ > max_nodes_) return 0;
     if(depth >= max_depth)
     {
@@ -1627,7 +1636,7 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
     if(n == GEN_MOVES_OUT_OF_MEM) max_move_stack_ = MOVEGEN_STACK_SIZE;
 #endif
     if(n == GEN_MOVES_OUT_OF_MEM) return eval_relative_with_see();
-    if(n == 0) return in_check ? SCORE_LOSS + depth : SCORE_DRAW;
+    if(n == 0) return in_check ? SCORE_LOSS + depth : draw_score();
     score v = SCORE_LOSS;
 
     // some weird pruning
@@ -1660,7 +1669,7 @@ score game::negamax_root(score a, score b)
     u8 n = gen_moves(&mvs_[0]);
     best_ = move::NO_MOVE;
     if(n == 0)
-        return in_check ? SCORE_LOSS : SCORE_DRAW;
+        return in_check ? SCORE_LOSS : draw_score();
     score v;
     v = SCORE_LOSS;
     order_moves(&mvs_[0], n, 0);
