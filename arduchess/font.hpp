@@ -260,7 +260,7 @@ static uint8_t const SAN_PIECE_CHARS[] PROGMEM =
 static void get_san_from_hist(uint8_t* t, ch2k::move m, uint8_t f)
 {
     for(uint8_t i = 0; i < 7; ++i) t[i] = SF_NULL;
-    uint8_t pc = f & 0xf;
+    uint8_t pc = f & 0x7;
     if(m.is_castle())
     {
         t[0] = SF_0; t[1] = SF_DASH; t[2] = SF_0;

@@ -178,10 +178,6 @@ static void send_move(ch2k::move mv)
     }
     ++ply;
     
-    ta = mv.fr().x;
-    tb = mv.to().x;
-    p = ch2k::piece::NOTHING;
-    
     for(uint8_t i = UNDOHIST_SIZE-1; i > 0; --i)
         undohist[i] = undohist[i - 1];
     for(uint8_t i = SANHIST_SIZE-1; i > 0; --i)
@@ -222,12 +218,15 @@ static void send_move(ch2k::move mv)
             movehist[i][j] = movehist[i + 1][j];
         movehist[MOVEHIST_SIZE * 2 - 1][j] = t[j];
     }
-      
+    
+    ta = mv.fr().x;
+    tb = mv.to().x;
+    p = ch2k::piece::NOTHING;
     nframe = 0;
     state = STATE_ANIM;
 }
 
-void undo_move()
+static void undo_single_ply()
 {
     if(ply == 0 || undohist_num == 0) return;
 
@@ -277,13 +276,30 @@ void undo_move()
         get_san_from_hist(
             movehist[0],
             g.get_rep_move(MOVEHIST_SIZE * 2 - 1),
-            sanhist[MOVEHIST_SIZE * 2 - 1]);
+            sanhist[MOVEHIST_SIZE * 2]);
     }
     for(uint8_t j = 0; j < SANHIST_SIZE - 1; ++j)
         sanhist[j] = sanhist[j + 1];
 
     update_board_cache();
     update_game_state();
+}
+
+static void undo_move()
+{
+    uint8_t ti1 = turn.binary_index();
+    uint8_t ti2 = !ti1;
+    if(ailevel[ti1] == 0 && ailevel[ti2] > 0)
+    {
+        // undo two plies: computer move and human move
+        undo_single_ply();
+        undo_single_ply();
+    }
+    else
+    {
+        // just undo one ply
+        undo_single_ply();
+    }
 }
 
 void loop() {
