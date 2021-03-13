@@ -1,6 +1,8 @@
 #pragma once
 
+#include "vars.hpp"
 #include "font.hpp"
+#include "save.hpp"
 
 // piece image data: 7 wide x 8 tall
 static uint8_t const PIECE_IMGS[][7] PROGMEM =
@@ -240,76 +242,84 @@ static void render_game_info_side(ch2k::piece_color c, uint8_t yo)
 
 static void render_game_info()
 {
-  render_game_info_side(ch2k::piece_color::W, rotated ? 0 : 50);
-  render_game_info_side(ch2k::piece_color::B, rotated ? 50 : 0);
-
-  uint8_t y = 14 + 6 * 5;
-  if(move_counter < MOVEHIST_SIZE)
-    y -= (MOVEHIST_SIZE - move_counter) * 6;
-  else if(state == STATE_GAME_OVER)
-    y -= 6;
-  for(uint8_t i = MOVEHIST_SIZE - 1; y >= 14; --i)
-  {
-    uint8_t x, x2;
-    x = (small_text_width(movehist[i][0], 7) + 0) >> 1;
-    if(x > 14) x = 14;
-    x = 24 - x;
-    draw_small_text(movehist[i][0], 7, y, x);
-    x = small_text_width(movehist[i][1], 7);
-    x2 = 50 - ((x + 1) >> 1);
-    if(x2 + x > 64)
-      x2 = 64 - x;
-    draw_small_text(movehist[i][1], 7, y, x2);
-    y -= 6;
-  }
-  if(state == STATE_GAME_OVER)
-  {
-    if(game_status == ch2k::game::STATUS_MATED)
-      draw_small_text_prog(MSG_MATE, 9, 44, 0);
-    else if(game_status >= ch2k::game::STATUS_DRAW_50MOVE)
+    render_game_info_side(ch2k::piece_color::W, rotated ? 0 : 50);
+    render_game_info_side(ch2k::piece_color::B, rotated ? 50 : 0);
+    
+    uint8_t y = 14 + 6 * 5;
+    uint16_t move_counter = (ply + 1) / 2;
+    if(move_counter < MOVEHIST_SIZE)
+        y -= (MOVEHIST_SIZE - (uint8_t)move_counter) * 6;
+    else if(state == STATE_GAME_OVER)
+        y -= 6;
+    uint8_t i = MOVEHIST_SIZE * 2 - 1;
+    for(; y >= 14; --i)
     {
-      draw_small_text_prog(MSG_DRAW, 5, 44, 0);
-      switch(game_status)
-      {
-      case ch2k::game::STATUS_DRAW_50MOVE:
-        draw_small_text_prog(MSG_50M, 8, 44, 22); break;
-      case ch2k::game::STATUS_DRAW_REPETITION:
-        draw_small_text_prog(MSG_REP, 10, 44, 22); break;
-      case ch2k::game::STATUS_DRAW_MATERIAL:
-        draw_small_text_prog(MSG_MAT, 8, 44, 22); break;
-      case ch2k::game::STATUS_DRAW_STALEMATE:
-        draw_small_text_prog(MSG_STALE, 9, 44, 22); break;
-      default: break;
-      }
+        uint8_t x, x2;
+        if(!((i ^ ply) & 1))
+        {
+            x = (small_text_width(movehist[i], 7) + 0) >> 1;
+            if(x > 14) x = 14;
+                x = 24 - x;
+            draw_small_text(movehist[i], 7, y, x);
+            y -= 6;
+        }
+        else
+        {
+            x = small_text_width(movehist[i], 7);
+            x2 = 50 - ((x + 1) >> 1);
+            if(x2 + x > 64)
+                x2 = 64 - x;
+            draw_small_text(movehist[i], 7, y, x2);
+        }
     }
-  }
-  uint8_t n[2];
-  if(move_counter == 0) return;
-  n[1] = SF_0 + move_counter % 10;
-  n[0] = SF_0 + move_counter / 10;
-  y = 14 + 6 * 5;
-  if(move_counter < MOVEHIST_SIZE)
-    y -= (MOVEHIST_SIZE - move_counter) * 6;
-  else if(state == STATE_GAME_OVER)
-    y -= 6;
-  for(uint8_t i = 0; y >= 14; ++i)
-  {
-    if(n[0] == SF_0)
+    if(state == STATE_GAME_OVER)
     {
-      if(n[1] == SF_0) break;
-      draw_small_text(n+1, 1, y, 4);
+        if(game_status == ch2k::game::STATUS_MATED)
+            draw_small_text_prog(MSG_MATE, 9, 44, 0);
+        else if(game_status >= ch2k::game::STATUS_DRAW_50MOVE)
+        {
+            draw_small_text_prog(MSG_DRAW, 5, 44, 0);
+            switch(game_status)
+            {
+            case ch2k::game::STATUS_DRAW_50MOVE:
+                draw_small_text_prog(MSG_50M, 8, 44, 22); break;
+            case ch2k::game::STATUS_DRAW_REPETITION:
+                draw_small_text_prog(MSG_REP, 10, 44, 22); break;
+            case ch2k::game::STATUS_DRAW_MATERIAL:
+                draw_small_text_prog(MSG_MAT, 8, 44, 22); break;
+            case ch2k::game::STATUS_DRAW_STALEMATE:
+                draw_small_text_prog(MSG_STALE, 9, 44, 22); break;
+            default: break;
+            }
+        }
     }
-    else
-      draw_small_text(n, 2, y, 0);
-    if(n[1] == SF_0)
+    uint8_t n[2];
+    if(move_counter == 0) return;
+    n[1] = SF_0 + move_counter % 10;
+    n[0] = SF_0 + move_counter / 10;
+    y = 14 + 6 * 5;
+    if(move_counter < MOVEHIST_SIZE)
+        y -= (MOVEHIST_SIZE - (uint8_t)move_counter) * 6;
+    else if(state == STATE_GAME_OVER)
+        y -= 6;
+    for(i = 0; y >= 14; ++i)
     {
-      n[1] = SF_9;
-      if(n[0] == SF_0) n[0] = SF_9;
-      else --n[0];
+        if(n[0] == SF_0)
+        {
+            if(n[1] == SF_0) break;
+            draw_small_text(n+1, 1, y, 4);
+        }
+        else
+            draw_small_text(n, 2, y, 0);
+        if(n[1] == SF_0)
+        {
+            n[1] = SF_9;
+            if(n[0] == SF_0) n[0] = SF_9;
+            else --n[0];
+        }
+        else --n[1];
+        y -= 6;
     }
-    else --n[1];
-    y -= 6;
-  }
 }
 
 static void render_ai_progress()
@@ -346,23 +356,91 @@ static void render_promotion_menu()
 
 static void render_new_game_menu()
 {
-  draw_pretty_box(0, 0, 15, 63);
+  draw_pretty_box(0, 0, 14, 62);
   draw_small_text_prog(MSG_T_NEW, 8, 5, 15);
-  draw_small_text_prog(MSG_WHITE, 5, 18, 4);
-  draw_small_text_prog(MSG_BLACK, 5, 26, 4);
+  draw_small_text_prog(MSG_WHITE, 5, 18, 3);
+  draw_small_text_prog(MSG_BLACK, 5, 26, 3);
   draw_small_text_prog(
-    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tb]), 255, 18, 35);
+    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tb]), 255, 18, 34);
   draw_small_text_prog(
-    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tc]), 255, 26, 35);
+    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tc]), 255, 26, 34);
   uint8_t* b = &buf[ta * 64 + 64*2];
-  for(uint8_t i = 34; i < 62; ++i)
+  for(uint8_t i = 33; i < 61; ++i)
     b[i] ^= 0xfe;
 }
 
 static void render_game_paused()
 {
-    draw_pretty_box(0, 0, 15, 63);
+  draw_pretty_box(0, 0, 14, 62);
+  if(game_status > ch2k::game::STATUS_CHECK)
+    draw_small_text_prog(MSG_GAME_OVER, 9, 5, 12);
+  else
     draw_small_text_prog(MSG_GAME_PAUSED, 11, 5, 9);
+  static constexpr uint8_t const yo = 18;
+  static constexpr uint8_t const xo = 11;
+  for(uint8_t n = 0, y = yo; n < NUM_MSGS_PAUSE; ++n, y += 8)
+  {
+      uint8_t const* t = (uint8_t const*)pgm_read_word(&MSGS_PAUSE[n]);
+      draw_small_text_prog(t, 255, y, xo);
+  }
+  uint8_t* b = &buf[ta * 64 + 64*2];
+  for(uint8_t i = xo - 1; i < xo + 42; ++i)
+    b[i] ^= 0xfe;
+}
+
+static void render_save_game_title()
+{
+    draw_pretty_box(0, 0, 14, 62);
+    draw_small_text_prog(tc ? MSG_T_LOAD : MSG_P_SAVE, 9, 5, 12);
+}
+
+static void render_save_game()
+{
+    render_save_game_title();
+    static constexpr uint8_t const yo = 18;
+    static constexpr uint8_t const xo = 20;
+    uint8_t check = SF_CHECKMARK;
+    draw_small_text_prog(MSG_P_BACK, 4, yo, xo);
+    for(uint8_t n = 0, y = yo + 8; n < NUM_SAVE_FILES; ++n, y += 8)
+    {
+        draw_small_text_prog(MSG_P_SAVE, 4, y, xo);
+        uint8_t c = SF_1 + n;
+        draw_small_text(&c, 1, y, xo + 18);
+        if(save_is_valid(n))
+            draw_small_text(&check, 1, y, xo - 6);
+    }
+    uint8_t* b = &buf[ta * 64 + 64*2];
+    for(uint8_t i = xo - 1; i < xo + 22; ++i)
+        b[i] ^= 0xfe;
+}
+
+static void render_save_game_board()
+{
+    // render save file board
+    bool valid = ta > 0 && save_is_valid(ta - 1);
+    if(valid)
+    {
+        update_board_cache_from_save(ta - 1);
+    }
+    else
+    {
+        for(uint8_t i = 0; i < 64; ++i)
+            ((ch2k::piece*)b)[i] = ch2k::piece::NOTHING;
+    }
+    render_board();
+}
+
+static void render_save_game_overwrite()
+{
+    render_save_game_title();
+    static constexpr uint8_t const yo = 18;
+    static constexpr uint8_t const xo = 12;
+    draw_small_text_prog(MSG_OVERWRITE_SAVE, 15, yo, 1);
+    draw_small_text_prog(MSG_OVERWRITE_SAVE, 9, yo + 8, xo);
+    draw_small_text_prog(MSG_CANCEL, 6, yo + 16, xo);
+    uint8_t* b = &buf[tb * 64 + 64*3];
+    for(uint8_t i = xo - 1; i < xo + 39; ++i)
+        b[i] ^= 0xfe;
 }
 
 static void clear_buf()

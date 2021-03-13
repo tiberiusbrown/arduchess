@@ -77,53 +77,6 @@ using s8 = int8_t;
 using u16 = uint16_t;
 using s16 = int16_t;
 
-// 32 bytes for the board: each piece is a nibble
-// piece types:
-//     0 nothing
-//     1 rook (can castle)
-//     2 pawn
-//     3 knight
-//     4 bishop
-//     5 rook
-//     6 queen
-//     7 king
-enum { GD__, GD_C, GD_P, GD_N, GD_B, GD_R, GD_Q, GD_K };
-enum
-{
-    GD___ = GD__,
-    GD__B = GD__ + 0x8, // indicates that it's black to move
-    GD_WC = GD_C,
-    GD_WP = GD_P,
-    GD_WN = GD_N,
-    GD_WB = GD_B,
-    GD_WR = GD_R,
-    GD_WQ = GD_Q,
-    GD_WK = GD_K,
-    GD_BC = GD_C + 0x8,
-    GD_BP = GD_P + 0x8,
-    GD_BN = GD_N + 0x8,
-    GD_BB = GD_B + 0x8,
-    GD_BR = GD_R + 0x8,
-    GD_BQ = GD_Q + 0x8,
-    GD_BK = GD_K + 0x8,
-};
-static inline constexpr u8 nibs(u8 a, u8 b)
-{
-    return (a << 4) + b;
-}
-
-static constexpr u8 const NEW_GAME_DATA[] PROGMEM =
-{
-    nibs(GD_BC, GD_BN), nibs(GD_BB, GD_BQ), nibs(GD_BK, GD_BB), nibs(GD_BN, GD_BC),
-    nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP), nibs(GD_BP, GD_BP),
-    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
-    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
-    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
-    nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___), nibs(GD___, GD___),
-    nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP), nibs(GD_WP, GD_WP),
-    nibs(GD_WC, GD_WN), nibs(GD_WB, GD_WQ), nibs(GD_WK, GD_WB), nibs(GD_WN, GD_WC),
-};
-
 static constexpr u8 const PVALS[] PROGMEM =
 {
     0, 1, 1, 3, 3, 5, 9, 0,
@@ -599,6 +552,18 @@ struct piece
         return PRINT_CHARS[8 * color().binary_index() + type().x];
     }
 
+    constexpr u8 save_game_nibble() const
+    {
+        return ((x >> 3) & 0x8) | (x & 0x7);
+    }
+
+    static constexpr piece from_save_game_nibble(u8 n)
+    {
+        return n == 0 ? piece::NOTHING : piece::from_type_color(
+            piece_type{ u8(n & 0x7) },
+            (n & 0x8) ? piece_color::B : piece_color::W);
+    }
+
     static piece const WP, WN, WB, WR, WQ, WK;
     static piece const BP, BN, BB, BR, BQ, BK;
 };
@@ -646,8 +611,8 @@ struct move
     move& clear_set_to(square s) { b = s.x; return *this; }
     constexpr bool is_castle() const { return (b & 0x08) != 0; }
     constexpr bool is_promotion() const { return (b & 0x80) != 0; }
-    constexpr bool is_pawn_dmove() const { return (a & 0x08) != 0; }
-    constexpr bool is_en_passant() const { return (a & 0x80) != 0; }
+    constexpr bool is_pawn_dmove() const { return (a & 0x08) != 0; } // assumes not promotion
+    constexpr bool is_en_passant() const { return (a & 0x80) != 0; } // assumes not promotion
     constexpr bool is_special()    const { return ((a | b) & 0x88) != 0; }
     constexpr bool is_non_dmove_special() const
     {
@@ -771,7 +736,7 @@ struct game
         move lastmove;
         piece_index cap;
         u8 flags;
-        uint8_t half_move;
+        u8 half_move;
     };
     static constexpr size_t const STATE_STACK_SIZE = 68 / sizeof(state);
     u8 state_index;
@@ -870,41 +835,10 @@ struct game
     knight_collection knights(piece_color c) const { return knight_collection{ *this, c }; }
     slider_collection sliders(piece_color c) const { return slider_collection{ *this, c }; }
 
-    void add_game_data_piece(square s, u8 p)
-    {
-        piece_color c = p & 0x8 ? piece_color::B : piece_color::W;
-        p &= 7;
-        switch(p)
-        {
-        case GD__B:
-            c_ = piece_color::B;
-            // fallthrough
-        case GD___:
-            square_to_index(s) = piece_index::NOTHING;
-            return;
-        case GD_P: pval(c) += PVALS[1]; add_pawn(s, c); return;
-        case GD_N: pval(c) += PVALS[3]; add_knight(s, c); return;
-        case GD_C:
-            if(s.col() == 0)
-                stack().flags |= castle_q(c);
-            else
-                stack().flags |= castle_k(c);
-            add_slider(s, c, piece_type::ROOK);
-            pval(c) += PVALS[5];
-            return;
-        case GD_B: case GD_R: case GD_Q:
-            add_slider(s, c, piece_type{ p });
-            pval(c) += pgm_read_byte(&PVALS[p]);
-            return;
-        case GD_K: pval(c) += PVALS[7]; add_king(s, c); return;
-        default: return;
-        }
-    }
-
     piece_index add_pawn(square s, piece_color color)
     {
         for(auto i : pawns(color))
-            if(index_to_piece(i).is_nothing())
+            if(index_to_square(i).is_nowhere())
             {
                 index_to_piece(i) = piece::pawn(color);
                 index_to_square(i) = s;
@@ -960,9 +894,14 @@ struct game
     void do_null_move();
     void undo_null_move();
 
-    void load_game_data(u8 const* d);
+    // reset everything
+    void clear();
+
+    void save_game_data(u8* x);
+    void load_game_data(u8 const* x);
+    piece_index add_piece(piece p, square s);
     void load_fen(char const* fen);
-    void new_game() { load_game_data(NEW_GAME_DATA); }
+    void new_game();
 
     // evaluation settings
 #if CH2K_TUNABLE_EVAL
@@ -1048,30 +987,47 @@ struct game
     score aspiration_window(u8 depth, score prev_score);
     void iterative_deepening();
 
-    static constexpr u8 const REP_MOVES_SIZE = 100;
+    static constexpr u8 const REP_MOVES_EXTRA = 12; // for undo
+    static constexpr u8 const REP_MOVES_SIZE = 100 + REP_MOVES_EXTRA;
 #if CH2K_USE_STD_ARRAY
     std::array<move, REP_MOVES_SIZE> rep_moves_;
 #else
     move rep_moves_[REP_MOVES_SIZE];
 #endif
-    u8 rep_move_head_;
+    u8 rep_move_num_;
 
     move get_rep_move(u8 n)
     {
-        if(n >= rep_move_head_)
-            n = REP_MOVES_SIZE - 1 - (n - rep_move_head_);
-        else
-            n = rep_move_head_ - n - 1;
         return rep_moves_[n];
+        //if(n >= rep_move_head_)
+        //    n = REP_MOVES_SIZE - 1 - (n - rep_move_head_);
+        //else
+        //    n = rep_move_head_ - n - 1;
+        //return rep_moves_[n];
     }
 
     void execute_move(move m)
     {
-        rep_moves_[rep_move_head_] = m;
-        if(++rep_move_head_ >= REP_MOVES_SIZE)
-            rep_move_head_ = 0;
+        for(u8 i = REP_MOVES_SIZE - 1; i > 0; --i)
+            rep_moves_[i] = rep_moves_[i - 1];
+        rep_moves_[0] = m;
         do_move(m);
         stack_reset();
+    }
+    void unexecute_move(move m, piece_index cap, u8 flags, u8 half_move)
+    {
+        for(u8 i = 0; i < REP_MOVES_SIZE - 1; ++i)
+            rep_moves_[i] = rep_moves_[i + 1];
+        stack_base()[1].cap = cap;
+        state_index = 1;
+        undo_move(m);
+        stack_base()->flags = flags;
+        stack_base()->half_move = half_move;
+        if(!m.is_promotion() && m.is_en_passant())
+        {
+            square epsq = square::from_rowcol(m.fr().row(), m.to().col());
+            stack_base()->lastmove.clear_set_to(epsq).set_pawn_dmove();
+        }
     }
 
     bool move_is_reversible(move mv) const
@@ -1572,8 +1528,8 @@ bool game::endgame_side(piece_color c, score& s, u8 depth)
         u8 kbr = kb.row();
         u8 kbc = kb.col();
         u8 king_separation =
-            tabs(s8(ka.row()) - s8(kbr)) +
-            tabs(s8(ka.col()) - s8(kbc));
+            tabs<s8>(s8(ka.row()) - s8(kbr)) +
+            tabs<s8>(s8(ka.col()) - s8(kbc));
         u8 kb_edge_dist;
         if(pa == 6 && nknig == 1)
         {
@@ -2131,8 +2087,6 @@ void game::undo_move(move m)
     square_to_index(x) = pc;
     index_to_square(pc) = x;
 
-    // handle flags here
-
     square_to_index(y) = cap;
     index_to_square(cap) = y;
 }
@@ -2149,13 +2103,17 @@ stack_str<6> move::uci_str() const
     return r;
 }
 
-void game::load_game_data(u8 const* d)
+void game::clear()
 {
 #if CH2K_MAX_MOVE_STACK
     max_move_stack_ = 0;
 #endif
-    rep_move_head_ = 0;
-    for(auto& b : square_to_index_) b = piece_index::GUARD;
+    rep_move_num_ = 0;
+    for(u8 i = 0; ; ++i)
+    {
+        square_to_index_[i] = (i & 0x88) ? piece_index::GUARD : piece_index::NOTHING;
+        if(i == 255) break;
+    }
     for(auto& p : index_to_piece_) p = piece::NOTHING;
     for(auto& s : index_to_square_) s = square::NOWHERE;
     index_to_piece_[64] = piece::GUARD;
@@ -2166,66 +2124,189 @@ void game::load_game_data(u8 const* d)
     set_first_slider(piece_color::B) = last_slider(piece_color::B);
 
     state_index = 0;
-    stack().flags = 0;
-    stack().half_move = 0;
+    state& s = stack();
+    s.flags = 0;
+    s.half_move = 0;
+    s.lastmove = move::NO_MOVE;
+    s.cap = piece_index::NOTHING;
 
     c_ = piece_color::W;
-
     pval(piece_color::W) = 0;
     pval(piece_color::B) = 0;
-    for(u8 i = 0; i < 32; ++i)
-    {
-        square s = square::from_rowcol(i >> 2, (i & 3) * 2);
-        u8 pp = pgm_read_byte(d++);
-        add_game_data_piece(s, pp >> 4);
-        add_game_data_piece(s + square_delta::EAST, pp & 0xf);
-    }
+}
 
-    // by default set last move to king
-    stack().lastmove = move{}.clear_set_to(index_to_square(king(c_.opposite())));
+void game::new_game()
+{
+    clear();
 
-    // find if king is in contact check, set last move to be checker
+    // add pawns
     {
-        square x = index_to_square(king(c_));
-        for(u8 j = 0; j < 8; ++j)
+        square ws = square::from_rowcol(6, 0);
+        square bs = square::from_rowcol(1, 0);
+        for(u8 i = 0; i < 8; ++i)
         {
-            square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
-            square y = x - d;
-            piece_index i = square_to_index(y);
-            if(i.is_nothing()) continue;
-            if(i.is_of_color(c_)) continue;
-            if(index_to_piece(i).type().can_cap_delta_contact(d))
-                stack().lastmove.clear_set_to(y);
-        }
-        for(u8 j = 0; j < 8; ++j)
-        {
-            square_delta d{ pgm_read_byte(&square_delta::KNIGHT_MOVES[j]) };
-            square y = x - d;
-            piece_index i = square_to_index(y);
-            if(i.is_nothing()) continue;
-            if(i.is_of_color(c_)) continue;
-            if(index_to_piece(i).type() == piece_type::KNIGHT)
-                stack().lastmove.clear_set_to(y);
+            add_pawn(ws, piece_color::W);
+            add_pawn(bs, piece_color::B);
+            ws += square_delta::EAST;
+            bs += square_delta::EAST;
         }
     }
+
+    // add other pieces
+    {
+        square s = square::from_rowcol(0, 0);
+        for(u8 i = 0; i < 2; ++i)
+        {
+            piece_color const c = (i == 0 ? piece_color::B : piece_color::W);
+            add_slider(s + square_delta::EAST * 0, c, piece_type::ROOK);
+            add_knight(s + square_delta::EAST * 1, c);
+            add_slider(s + square_delta::EAST * 2, c, piece_type::BISHOP);
+            add_slider(s + square_delta::EAST * 3, c, piece_type::QUEEN);
+            add_king(s + square_delta::EAST * 4, c);
+            add_slider(s + square_delta::EAST * 5, c, piece_type::BISHOP);
+            add_knight(s + square_delta::EAST * 6, c);
+            add_slider(s + square_delta::EAST * 7, c, piece_type::ROOK);
+            s += square_delta::SOUTH * 7;
+        }
+    }
+
+    pval(piece_color::W) = pval(piece_color::B) = 8 * 1 + 2 * (5 + 3 + 3) + 9;
+    stack().flags = (CASTLE_WK | CASTLE_WQ | CASTLE_BK | CASTLE_BQ);
+
+    // set last move to black king
+    stack().lastmove.clear_set_to(square::from_rowcol(0, 4));
+}
+
+#ifdef CH2K_ARDUINO
+#define CH2K_EEPROM_WR(a__, d__) EEPROM.update((int)(a__), (d__))
+#define CH2K_EEPROM_RD(a__)      EEPROM.read((int)(a__))
+#else
+#define CH2K_EEPROM_WR(a__, d__) (*(a__) = (d__))
+#define CH2K_EEPROM_RD(a__)      (*(a__))
+#endif
+
+/*
+GAME DATA FORMAT
+ 32 - board data (4 bits per piece type/color)
+  2 - last move (contains en passant info)
+  1 - half move clock
+  1 - repetition history num
+??? - repetition history
+  1 - side to move
+??? - total
+*/
+static constexpr int const EEPROM_GAME_DATA_SIZE = 37 + int(game::REP_MOVES_SIZE) * 2;
+
+void game::save_game_data(u8* x)
+{
+    state const& s = stack();
+
+    // board data
+    for(u8 r = 0; r < 8; ++r)
+    {
+        for(u8 c = 0; c < 8; c += 2)
+        {
+            u8 d = 0;
+            square s = square::from_rowcol(r, c);
+            piece_index i = square_to_index(s);
+            if(!i.is_nothing())
+                d = index_to_piece(i).save_game_nibble();
+            d <<= 4;
+            s += square_delta::EAST;
+            i = square_to_index(s);
+            if(!i.is_nothing())
+                d |= index_to_piece(i).save_game_nibble();
+            CH2K_EEPROM_WR(x++, d);
+        }
+    }
+
+    // last move
+    CH2K_EEPROM_WR(x++, s.lastmove.a);
+    CH2K_EEPROM_WR(x++, s.lastmove.b);
+
+    // half move clock
+    CH2K_EEPROM_WR(x++, s.half_move);
+
+    // repetition history num
+    CH2K_EEPROM_WR(x++, rep_move_num_);
+
+    // repetition history
+    for(u8 n = 0; n < REP_MOVES_SIZE; ++n)
+    {
+        CH2K_EEPROM_WR(x++, rep_moves_[n].a);
+        CH2K_EEPROM_WR(x++, rep_moves_[n].b);
+    }
+
+    // side to move
+    CH2K_EEPROM_WR(x, c_.x);
+}
+
+piece_index game::add_piece(piece p, square s)
+{
+    piece_color const c = p.color();
+    piece_type const t = p.type();
+    switch(t.x)
+    {
+    case piece_type::WP_: case piece_type::BP_:
+        pval(c) += PVALS[1];
+        return add_pawn(s, c);
+    case piece_type::N_:
+        pval(c) += PVALS[3];
+        return add_knight(s, c);
+    case piece_type::B_: case piece_type::R_: case piece_type::Q_:
+        pval(c) += pgm_read_byte(&PVALS[t.x]);
+        return add_slider(s, c, t);
+    case piece_type::K_:
+        add_king(s, c);
+        return king(c);
+    default:
+        break;
+    }
+    return piece_index::NOTHING;
+}
+
+void game::load_game_data(u8 const* x)
+{
+    clear();
+    state& s = stack();
+
+    // board data
+    for(u8 r = 0; r < 8; ++r)
+    {
+        for(u8 c = 0; c < 8; c += 2)
+        {
+            uint8_t d = CH2K_EEPROM_RD(x++);
+            square s = square::from_rowcol(r, c);
+            add_piece(piece::from_save_game_nibble(d >> 4), s);
+            s += square_delta::EAST;
+            add_piece(piece::from_save_game_nibble(d & 0xf), s);
+        }
+    }
+
+    // last move
+    s.lastmove.a = CH2K_EEPROM_RD(x++);
+    s.lastmove.b = CH2K_EEPROM_RD(x++);
+
+    // half move clock
+    s.half_move = CH2K_EEPROM_RD(x++);
+
+    // repetition history num
+    rep_move_num_ = CH2K_EEPROM_RD(x++);
+
+    // repetition history
+    for(u8 n = 0; n < REP_MOVES_SIZE; ++n)
+    {
+        rep_moves_[n].a = CH2K_EEPROM_RD(x++);
+        rep_moves_[n].b = CH2K_EEPROM_RD(x++);
+    }
+
+    // side to move
+    c_ = piece_color{ CH2K_EEPROM_RD(x) };
 }
 
 void game::load_fen(char const* fen)
 {
-#if CH2K_MAX_MOVE_STACK
-    max_move_stack_ = 0;
-#endif
-    for(auto& m : rep_moves_) m = move::NO_MOVE;
-    rep_move_head_ = 0;
-    for(auto& b : square_to_index_) b = piece_index::GUARD;
-    for(auto& p : index_to_piece_) p = piece::NOTHING;
-    for(auto& s : index_to_square_) s = square::NOWHERE;
-    index_to_piece_[64] = piece::GUARD;
-
-    set_last_knight(piece_color::W) = first_knight(piece_color::W);
-    set_first_slider(piece_color::W) = last_slider(piece_color::W);
-    set_last_knight(piece_color::B) = first_knight(piece_color::B);
-    set_first_slider(piece_color::B) = last_slider(piece_color::B);
+    clear();
 
     // board
     char c;
@@ -2236,18 +2317,18 @@ void game::load_fen(char const* fen)
     {
         switch(c)
         {
-        case 'p': pval(piece_color::B) += PVALS[1]; add_pawn  (x, piece_color::B); x += square_delta::EAST; break;
-        case 'n': pval(piece_color::B) += PVALS[3]; add_knight(x, piece_color::B); x += square_delta::EAST; break;
+        case 'p': pval(piece_color::B) += PVALS[1]; add_pawn  (x, piece_color::B);                     x += square_delta::EAST; break;
+        case 'n': pval(piece_color::B) += PVALS[3]; add_knight(x, piece_color::B);                     x += square_delta::EAST; break;
         case 'b': pval(piece_color::B) += PVALS[4]; add_slider(x, piece_color::B, piece_type::BISHOP); x += square_delta::EAST; break;
-        case 'r': pval(piece_color::B) += PVALS[5]; add_slider(x, piece_color::B, piece_type::ROOK); x += square_delta::EAST; break;
-        case 'q': pval(piece_color::B) += PVALS[6]; add_slider(x, piece_color::B, piece_type::QUEEN); x += square_delta::EAST; break;
-        case 'k': pval(piece_color::B) += PVALS[7]; add_king  (x, piece_color::B); x += square_delta::EAST; break;
-        case 'P': pval(piece_color::W) += PVALS[1]; add_pawn(x, piece_color::W); x += square_delta::EAST; break;
-        case 'N': pval(piece_color::W) += PVALS[3]; add_knight(x, piece_color::W); x += square_delta::EAST; break;
+        case 'r': pval(piece_color::B) += PVALS[5]; add_slider(x, piece_color::B, piece_type::ROOK);   x += square_delta::EAST; break;
+        case 'q': pval(piece_color::B) += PVALS[6]; add_slider(x, piece_color::B, piece_type::QUEEN);  x += square_delta::EAST; break;
+        case 'k': pval(piece_color::B) += PVALS[7]; add_king  (x, piece_color::B);                     x += square_delta::EAST; break;
+        case 'P': pval(piece_color::W) += PVALS[1]; add_pawn  (x, piece_color::W);                     x += square_delta::EAST; break;
+        case 'N': pval(piece_color::W) += PVALS[3]; add_knight(x, piece_color::W);                     x += square_delta::EAST; break;
         case 'B': pval(piece_color::W) += PVALS[4]; add_slider(x, piece_color::W, piece_type::BISHOP); x += square_delta::EAST; break;
-        case 'R': pval(piece_color::W) += PVALS[5]; add_slider(x, piece_color::W, piece_type::ROOK); x += square_delta::EAST; break;
-        case 'Q': pval(piece_color::W) += PVALS[6]; add_slider(x, piece_color::W, piece_type::QUEEN); x += square_delta::EAST; break;
-        case 'K': pval(piece_color::W) += PVALS[7]; add_king  (x, piece_color::W); x += square_delta::EAST; break;
+        case 'R': pval(piece_color::W) += PVALS[5]; add_slider(x, piece_color::W, piece_type::ROOK);   x += square_delta::EAST; break;
+        case 'Q': pval(piece_color::W) += PVALS[6]; add_slider(x, piece_color::W, piece_type::QUEEN);  x += square_delta::EAST; break;
+        case 'K': pval(piece_color::W) += PVALS[7]; add_king  (x, piece_color::W);                     x += square_delta::EAST; break;
         case '1': case '2': case '3': case '4':
         case '5': case '6': case '7': case '8':
             for(u8 n = 0; n < u8(c - '0'); ++n)

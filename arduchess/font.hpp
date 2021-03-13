@@ -4,7 +4,9 @@ enum
 {
   SF_NULL,
   
+  // these must be among first 8 chars for san_flags
   SF_N, SF_B, SF_R, SF_Q, SF_K,
+  
   SF_a, SF_b, SF_c, SF_d, SF_e, SF_f, SF_g, SF_h,
   SF_0, SF_1, SF_2, SF_3, SF_4, SF_5, SF_6, SF_7, SF_8, SF_9,
   SF_DASH, SF_CAP, SF_CHECK, SF_MATE,
@@ -14,7 +16,9 @@ enum
 
   // other letters for spelling game status
   SF_C, SF_H, SF_E, SF_M, SF_A, SF_T, SF_D, SF_W, SF_S, SF_L,
-  SF_P, SF_I, SF_O, SF_V, SF_U, SF_G, SF_COLON, SF_SPACE,
+  SF_P, SF_I, SF_O, SF_V, SF_U, SF_G,
+  
+  SF_COLON, SF_QUESTION, SF_SPACE, SF_CHECKMARK,
 };
 
 static uint8_t const MSG_MATE[] PROGMEM =
@@ -44,6 +48,8 @@ static uint8_t const MSG_T_LOAD[] PROGMEM =
 { SF_L, SF_O, SF_A, SF_D, SF_SPACE, SF_G, SF_A, SF_M, SF_E, SF_NULL };
 static uint8_t const MSG_T_OPTIONS[] PROGMEM =
 { SF_O, SF_P, SF_T, SF_I, SF_O, SF_N, SF_S, SF_NULL };
+static uint8_t const MSG_T_HELP[] PROGMEM =
+{ SF_H, SF_E, SF_L, SF_P, SF_NULL };
 
 static uint8_t const * const MSGS_TITLE[] PROGMEM =
 {
@@ -70,6 +76,34 @@ static uint8_t const MSG_GAME_PAUSED[] PROGMEM =
 {
   SF_G, SF_A, SF_M, SF_E, SF_SPACE, SF_P, SF_A, SF_U, SF_S, SF_E, SF_D,
 };
+static uint8_t const MSG_GAME_OVER[] PROGMEM =
+{
+  SF_G, SF_A, SF_M, SF_E, SF_SPACE, SF_O, SF_V, SF_E, SF_R,
+};
+
+static uint8_t const MSG_P_BACK[] PROGMEM =
+{ SF_B, SF_A, SF_C, SF_K, SF_NULL };
+static uint8_t const MSG_P_UNDO[] PROGMEM =
+{ SF_U, SF_N, SF_D, SF_O, SF_SPACE, SF_M, SF_O, SF_V, SF_E, SF_NULL };
+static uint8_t const MSG_P_SAVE[] PROGMEM =
+{ SF_S, SF_A, SF_V, SF_E, SF_SPACE, SF_G, SF_A, SF_M, SF_E, SF_NULL };
+static uint8_t const MSG_P_MAIN[] PROGMEM =
+{ SF_M, SF_A, SF_I, SF_N, SF_SPACE, SF_M, SF_E, SF_N, SF_U, SF_NULL };
+
+static uint8_t const * const MSGS_PAUSE[] PROGMEM =
+{
+    MSG_P_BACK, MSG_P_UNDO, MSG_P_SAVE, MSG_P_MAIN,
+};
+static constexpr uint8_t const NUM_MSGS_PAUSE =
+  sizeof(MSGS_PAUSE) / sizeof(MSGS_PAUSE[0]);
+  
+static uint8_t const MSG_OVERWRITE_SAVE[] PROGMEM =
+{
+    SF_O, SF_V, SF_E, SF_R, SF_W, SF_R, SF_I, SF_T, SF_E,
+    SF_SPACE, SF_S, SF_A, SF_V, SF_E, SF_QUESTION
+};
+static uint8_t const MSG_CANCEL[] PROGMEM =
+{ SF_C, SF_A, SF_N, SF_C, SF_E, SF_L };
 
 static uint8_t const SMALL_FONT[] PROGMEM =
 {
@@ -128,7 +162,9 @@ static uint8_t const SMALL_FONT[] PROGMEM =
   4, 0x0e, 0x11, 0x15, 0x1d,       // G
   
   1, 0x0a,                         // colon
+  3, 0x01, 0x15, 0x02,             // question
   2, 0x00, 0x00,                   // space
+  4, 0x04, 0x08, 0x04, 0x02,       // checkmark
 };
 
 static uint8_t small_char_width(uint8_t c)
@@ -214,4 +250,36 @@ static void draw_small_text_prog(uint8_t const* t, uint8_t n, uint8_t y, uint8_t
   for(uint8_t i = 0; i < n; ++i)
     b[i] = pgm_read_byte(&t[i]);
   draw_small_text(b, n, y, x);
+}
+
+static uint8_t const SAN_PIECE_CHARS[] PROGMEM =
+{
+    SF_N, SF_B, SF_R, SF_Q, SF_K
+};
+
+static void get_san_from_hist(uint8_t* t, ch2k::move m, uint8_t f)
+{
+    for(uint8_t i = 0; i < 7; ++i) t[i] = SF_NULL;
+    uint8_t pc = f & 0xf;
+    if(m.is_castle())
+    {
+        t[0] = SF_0; t[1] = SF_DASH; t[2] = SF_0;
+        if(m.to().col() < 4)
+        {
+            t[3] = SF_DASH;
+            t[4] = SF_0;
+        }
+    }
+    else
+    {
+        if(pc != SF_NULL) *t++ = pc;
+        if(f & SANFLAG_FILE) *t++ = SF_a + m.fr().col();
+        if(f & SANFLAG_RANK) *t++ = SF_8 - m.fr().row();
+        if(f & SANFLAG_CAP) *t++ = SF_CAP;
+        *t++ = SF_a + m.to().col();
+        *t++ = SF_8 - m.to().row();
+        if(m.is_promotion()) *t++ = pgm_read_byte(&SAN_PIECE_CHARS[m.promotion_piece_type().x - 3]);
+        if(f & SANFLAG_CHECK) *t++ = SF_CHECK;
+        else if(f & SANFLAG_MATE) *t++ = SF_MATE;
+    }
 }
