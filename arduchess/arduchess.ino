@@ -221,6 +221,7 @@ static void send_move(ch2k::move mv)
     
     ta = mv.fr().x;
     tb = mv.to().x;
+    tc = p.x;
     p = ch2k::piece::NOTHING;
     nframe = 0;
     state = STATE_ANIM;
@@ -232,28 +233,31 @@ static void undo_single_ply()
 
     ch2k::move m = g.get_rep_move(0);
     ch2k::piece_index icap;
-    ch2k::square b = m.to();
+    ch2k::piece pcap = ch2k::piece::NOTHING;
+    ch2k::square fr = m.fr();
+    ch2k::square to = m.to();
+    bool ep = !m.is_promotion() && m.is_en_passant();
     if(m.is_castle())
     {
         // set captured piece to rook
-        if(b.col() < 4) // queenside
-            icap = g.square_to_index(b + ch2k::square_delta::EAST);
+        if(to.col() < 4) // queenside
+            icap = g.square_to_index(to + ch2k::square_delta::EAST);
         else            // kingside
-            icap = g.square_to_index(b + ch2k::square_delta::WEST);
+            icap = g.square_to_index(to + ch2k::square_delta::WEST);
     }
     else
     {
         // add captured piece to piece lists
-        ch2k::piece pcap { undohist[0].cap };
-        if(!m.is_promotion() && m.is_en_passant())
+        pcap = ch2k::piece{ undohist[0].cap };
+        if(ep)
         {
-            b = ch2k::square::from_rowcol(m.fr().row(), b.col());
+            to = ch2k::square::from_rowcol(fr.row(), to.col());
             pcap = ch2k::piece::pawn(g.c_);
         }
-        ch2k::piece_index t = g.square_to_index(b);
-        icap = g.add_piece(pcap, b);
+        ch2k::piece_index t = g.square_to_index(to);
+        icap = g.add_piece(pcap, to);
         g.index_to_square(icap) = ch2k::square::NOWHERE;
-        g.square_to_index(b) = t;
+        g.square_to_index(to) = t;
     }
     g.unexecute_move(m, icap, undohist[0].flags, undohist[0].half_move);
         
@@ -280,26 +284,25 @@ static void undo_single_ply()
     }
     for(uint8_t j = 0; j < SANHIST_SIZE - 1; ++j)
         sanhist[j] = sanhist[j + 1];
-
-    update_board_cache();
-    update_game_state();
+    
+    // anim info
+    ta = to.x;
+    tb = fr.x;
+    tc = g.square_to_piece(fr).x;
+    if(ep) pcap = ch2k::piece::NOTHING;
+    b[to.row()][to.col()] = pcap;
+    nframe = 0;
 }
 
 static void undo_move()
 {
     uint8_t ti1 = turn.binary_index();
     uint8_t ti2 = !ti1;
+    undo_single_ply();
     if(ailevel[ti1] == 0 && ailevel[ti2] > 0)
-    {
-        // undo two plies: computer move and human move
-        undo_single_ply();
-        undo_single_ply();
-    }
+        state = STATE_ANIM_UNDO2;
     else
-    {
-        // just undo one ply
-        undo_single_ply();
-    }
+        state = STATE_ANIM_UNDO;
 }
 
 void loop() {
@@ -627,6 +630,8 @@ ISR(TIMER3_COMPA_vect)
         paint_left_half(true);
         break;
     case STATE_ANIM:
+    case STATE_ANIM_UNDO:
+    case STATE_ANIM_UNDO2:
         if(nframe == 0)
         {
             clear_buf();
@@ -640,7 +645,17 @@ ISR(TIMER3_COMPA_vect)
             render_anim();
         paint_left_half(true);
         if(nframe == 31)
-            update_game_state_after_move();
+        {
+            if(state == STATE_ANIM)
+                update_game_state_after_move();
+            else if(state == STATE_ANIM_UNDO2)
+            {
+                undo_single_ply();
+                state = STATE_ANIM_UNDO;
+            }
+            else
+                update_game_state();
+        }
         break;
     case STATE_GAME_PAUSED_START:
         render_board();

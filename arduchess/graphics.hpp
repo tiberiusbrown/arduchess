@@ -139,11 +139,11 @@ static void render_anim()
   x = pgm_read_byte(&SMOOTHERSTEP[x]);
   y = uint8_t((uint16_t(x) * (by - ay) + 32) >> 6) + ay;
   x = uint8_t((uint16_t(x) * (bx - ax) + 32) >> 6) + ax;
-  ch2k::piece p = g.square_to_piece(ch2k::square{tb});
-  if(g.stack().lastmove.is_promotion())
-    p = g.c_.is_white() ? ch2k::piece::BP : ch2k::piece::WP;
+  //ch2k::piece p = g.square_to_piece(ch2k::square{tb});
+  //if(g.stack().lastmove.is_promotion())
+  //  p = g.c_.is_white() ? ch2k::piece::BP : ch2k::piece::WP;
   draw_piece_unaligned(
-    get_piece_img(p),
+    get_piece_img(ch2k::piece{ tc }),
     buf, y, x);
 }
 
