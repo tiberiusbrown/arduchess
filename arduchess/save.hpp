@@ -120,13 +120,6 @@ static void load_game(uint8_t n)
     undohist_num = EEPROM.read(a + offsetof(save_file_data, undohist_num));
     *((uint8_t*)&ply + 0) = EEPROM.read(a + offsetof(save_file_data, ply) + 0);
     *((uint8_t*)&ply + 1) = EEPROM.read(a + offsetof(save_file_data, ply) + 1);
-    
-    // update SAN move history
-    for(uint8_t i = 0; i < sizeof(movehist); ++i)
-        *((uint8_t*)movehist + i) = SF_NULL;
-    uint8_t m = (ply > MOVEHIST_SIZE * 2 ? MOVEHIST_SIZE * 2 : ply);
-    for(uint8_t i = MOVEHIST_SIZE * 2 - 1, j = 0; j < m; --i, ++j)
-        get_san_from_hist(movehist[i], g.get_rep_move(j), sanhist[j]);
 }
 
 static void update_board_cache_from_save(uint8_t n)

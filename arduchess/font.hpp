@@ -18,7 +18,7 @@ enum
   SF_C, SF_H, SF_E, SF_M, SF_A, SF_T, SF_D, SF_W, SF_S, SF_L,
   SF_P, SF_I, SF_O, SF_V, SF_U, SF_G,
   
-  SF_COLON, SF_QUESTION, SF_SPACE, SF_CHECKMARK,
+  SF_COLON, SF_QUESTION, SF_SPACE, SF_SPACE3, SF_CHECKMARK,
 };
 
 static uint8_t const MSG_MATE[] PROGMEM =
@@ -164,6 +164,7 @@ static uint8_t const SMALL_FONT[] PROGMEM =
   1, 0x0a,                         // colon
   3, 0x01, 0x15, 0x02,             // question
   2, 0x00, 0x00,                   // space
+  3, 0x00, 0x00, 0x00,             // space3 (for aligning numbers)
   4, 0x04, 0x08, 0x04, 0x02,       // checkmark
 };
 
@@ -259,7 +260,7 @@ static uint8_t const SAN_PIECE_CHARS[] PROGMEM =
 
 static void get_san_from_hist(uint8_t* t, ch2k::move m, uint8_t f)
 {
-    for(uint8_t i = 0; i < 7; ++i) t[i] = SF_NULL;
+    for(uint8_t i = 0; i < 8; ++i) t[i] = SF_NULL;
     uint8_t pc = f & 0x7;
     if(m.is_castle())
     {

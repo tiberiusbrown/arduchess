@@ -994,7 +994,6 @@ struct game
 #else
     move rep_moves_[REP_MOVES_SIZE];
 #endif
-    u8 rep_move_num_;
 
     move get_rep_move(u8 n)
     {
@@ -1327,7 +1326,7 @@ score game::qsearch(move* m, score a, score b, u8 depth)
     //    return eval_relative_with_see();
     if(state_index == STATE_STACK_SIZE - 1)
         return eval_relative();
-    if(nodes_ > max_nodes_) return 0;
+    if(stop_ || nodes_ > max_nodes_) return 0;
     u8 n = gen_moves(m);
 #if CH2K_MAX_MOVE_STACK
     if(n == GEN_MOVES_OUT_OF_MEM) max_move_stack_ = MOVEGEN_STACK_SIZE;
@@ -1576,7 +1575,7 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
     if(check_draw_50move()) return draw_score();
     if(check_draw_material()) return draw_score();
     if(check_draw_repetition() >= 2) return draw_score();
-    if(nodes_ > max_nodes_) return 0;
+    if(stop_ || nodes_ > max_nodes_) return 0;
     if(depth >= max_depth)
     {
         // qsearch has the danger of exceeding low node limits
@@ -1654,7 +1653,7 @@ score game::aspiration_window(u8 depth, score prev_score)
     score b = depth < ASPIRATION_MIN_DEPTH ? SCORE_WIN :
         tmin<score>(SCORE_WIN, prev_score + delta);
 
-    while(1 || !stop_)
+    while(!stop_)
     {
         max_depth_ = depth;
         move best = best_;
@@ -1689,6 +1688,7 @@ score game::aspiration_window(u8 depth, score prev_score)
 
 void game::iterative_deepening()
 {
+    stop_ = false;
     score_ = 0;
     nodes_ = 0;
     depth_ = 0;
@@ -2108,7 +2108,6 @@ void game::clear()
 #if CH2K_MAX_MOVE_STACK
     max_move_stack_ = 0;
 #endif
-    rep_move_num_ = 0;
     for(u8 i = 0; ; ++i)
     {
         square_to_index_[i] = (i & 0x88) ? piece_index::GUARD : piece_index::NOTHING;
@@ -2190,12 +2189,11 @@ GAME DATA FORMAT
  32 - board data (4 bits per piece type/color)
   2 - last move (contains en passant info)
   1 - half move clock
-  1 - repetition history num
 ??? - repetition history
   1 - side to move
 ??? - total
 */
-static constexpr int const EEPROM_GAME_DATA_SIZE = 37 + int(game::REP_MOVES_SIZE) * 2;
+static constexpr int const EEPROM_GAME_DATA_SIZE = 36 + int(game::REP_MOVES_SIZE) * 2;
 
 void game::save_game_data(u8* x)
 {
@@ -2226,9 +2224,6 @@ void game::save_game_data(u8* x)
 
     // half move clock
     CH2K_EEPROM_WR(x++, s.half_move);
-
-    // repetition history num
-    CH2K_EEPROM_WR(x++, rep_move_num_);
 
     // repetition history
     for(u8 n = 0; n < REP_MOVES_SIZE; ++n)
@@ -2289,9 +2284,6 @@ void game::load_game_data(u8 const* x)
 
     // half move clock
     s.half_move = CH2K_EEPROM_RD(x++);
-
-    // repetition history num
-    rep_move_num_ = CH2K_EEPROM_RD(x++);
 
     // repetition history
     for(u8 n = 0; n < REP_MOVES_SIZE; ++n)

@@ -236,7 +236,7 @@ static void render_game_info_side(ch2k::piece_color c, uint8_t yo)
   {
     draw_small_text_prog(MSG_HUMAN, 5, yo+4, 4);
   }
-  if(!((ailevel[ci] != 0) && state == STATE_AI_START))
+  if(!(turn == c && (ailevel[ci] != 0) && state == STATE_AI_START))
     draw_small_text_prog(c.is_white() ? MSG_WHITE : MSG_BLACK, 5, yo+4, 35);
 }
 
@@ -251,25 +251,27 @@ static void render_game_info()
         y -= (MOVEHIST_SIZE - (uint8_t)move_counter) * 6;
     else if(state == STATE_GAME_OVER)
         y -= 6;
-    uint8_t i = MOVEHIST_SIZE * 2 - 1;
-    for(; y >= 14; --i)
+    uint8_t t[8];
+    for(uint8_t i = 0; y >= 14; ++i)
     {
+        if(i >= ply) break;
         uint8_t x, x2;
-        if(!((i ^ ply) & 1))
+        get_san_from_hist(t, g.get_rep_move(i), sanhist[i]);
+        if(((i ^ ply) & 1) != 0)
         {
-            x = (small_text_width(movehist[i], 7) + 0) >> 1;
-            if(x > 14) x = 14;
-                x = 24 - x;
-            draw_small_text(movehist[i], 7, y, x);
+            x = (small_text_width(t, 7) + 0) >> 1;
+            if(x > 12) x = 12;
+                x = 26 - x;
+            draw_small_text(t, 7, y, x);
             y -= 6;
         }
         else
         {
-            x = small_text_width(movehist[i], 7);
-            x2 = 50 - ((x + 1) >> 1);
+            x = small_text_width(t, 7);
+            x2 = 52 - ((x + 1) >> 1);
             if(x2 + x > 64)
                 x2 = 64 - x;
-            draw_small_text(movehist[i], 7, y, x2);
+            draw_small_text(t, 7, y, x2);
         }
     }
     if(state == STATE_GAME_OVER)
@@ -293,31 +295,40 @@ static void render_game_info()
             }
         }
     }
-    uint8_t n[2];
-    if(move_counter == 0) return;
-    n[1] = SF_0 + move_counter % 10;
-    n[0] = SF_0 + move_counter / 10;
+    if(ply == 0) return;
+    uint8_t n[3];
+    {
+        n[2] = SF_0 + move_counter % 10;
+        uint16_t mc2 = move_counter / 10;
+        n[1] = SF_0 + mc2 % 10;
+        n[0] = SF_0 + mc2 / 10;
+    }
     y = 14 + 6 * 5;
     if(move_counter < MOVEHIST_SIZE)
         y -= (MOVEHIST_SIZE - (uint8_t)move_counter) * 6;
     else if(state == STATE_GAME_OVER)
         y -= 6;
-    for(i = 0; y >= 14; ++i)
+    for(uint8_t i = 0; y >= 14; ++i)
     {
-        if(n[0] == SF_0)
+        t[0] = n[0], t[1] = n[1], t[2] = n[2];
+        if(t[0] == SF_0)
         {
-            if(n[1] == SF_0) break;
-            draw_small_text(n+1, 1, y, 4);
+            t[0] = SF_SPACE3;
+            if(t[1] == SF_0) t[1] = SF_SPACE3;
         }
-        else
-            draw_small_text(n, 2, y, 0);
-        if(n[1] == SF_0)
+        draw_small_text(t, 3, y, 0);
+        if(n[2] == SF_0)
         {
-            n[1] = SF_9;
-            if(n[0] == SF_0) n[0] = SF_9;
-            else --n[0];
+            n[2] = SF_9;
+            if(n[1] == SF_0)
+            {
+                n[1] = SF_9;
+                if(n[0] == SF_0) n[0] = SF_9;
+                else --n[0];
+            }
+            else --n[1];
         }
-        else --n[1];
+        else --n[2];
         y -= 6;
     }
 }

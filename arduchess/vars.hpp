@@ -5,7 +5,6 @@
 
 // algebraic notation move history
 static constexpr uint8_t const MOVEHIST_SIZE = 6;
-static uint8_t movehist[MOVEHIST_SIZE*2][7];
 static uint16_t ply;
 
 static constexpr uint8_t const UNDOHIST_SIZE = ch2k::game::REP_MOVES_EXTRA;

@@ -57,7 +57,7 @@ static void update_game_state_after_move()
   update_game_state();
 }
 
-static void poll_buttons()
+static void poll_buttons_debounce(uint8_t debounce_num)
 {
     uint8_t b = Arduboy2Core::buttonsState();
     
@@ -68,7 +68,7 @@ static void poll_buttons()
     {
         if(diff & m)
         {
-            if(++button_debounce[n] >= DEBOUNCE_NUM)
+            if(++button_debounce[n] >= debounce_num)
             {
                 button_debounce[n] = 0;
                 chg |= m;
@@ -82,6 +82,16 @@ static void poll_buttons()
     buttons ^= chg;
 }
 
+static void poll_buttons()
+{
+    poll_buttons_debounce(DEBOUNCE_NUM);
+}
+
+static void poll_buttons_during_rendering()
+{
+    poll_buttons_debounce(0);   
+}
+
 static uint8_t just_pressed(uint8_t b)
 {
     return (buttons & ~buttons_prev & b) ? 1 : 0;
@@ -93,8 +103,6 @@ static void setup_for_game()
     cy = 6 * 8;
     aihappy[0] = aihappy[1] = 2;
     ply = 0;
-    for(uint8_t i = 0; i < sizeof(movehist); ++i)
-        *((uint8_t*)movehist + i) = SF_NULL;
     undohist_num = 0;
     rotated = false;
 }
@@ -135,10 +143,7 @@ ch2k::move valid_move(uint8_t a, uint8_t b)
 static void send_move(ch2k::move mv)
 {
     uint8_t i = 0;
-    uint8_t t[7]; // TODO: set t to appropriate movehist pointer
     ch2k::piece& p = b[mv.fr().row()][mv.fr().col()];
-    if(!p.type().is_pawn())
-        t[i++] = pgm_read_byte(&SAN_PIECE_CHARS[p.type().x - 3]);
     uint8_t n = g.gen_moves(&g.mvs_[0]);
     bool need_rank = false, need_file = false;
     for(uint8_t j = 0; j < n; ++j)
@@ -154,28 +159,6 @@ static void send_move(ch2k::move mv)
         (!mv.is_promotion() && mv.is_en_passant());
     if(p.type().is_pawn() && cap)
         need_file = true;
-    if(need_file)
-        t[i++] = SF_a + mv.fr().col();
-    if(need_rank)
-        t[i++] = SF_8 - mv.fr().row();
-    if(cap)
-        t[i++] = SF_CAP;
-    t[i++] = SF_a + mv.to().col();
-    t[i++] = SF_8 - mv.to().row();
-    if(mv.is_promotion())
-        t[i++] = pgm_read_byte(&SAN_PIECE_CHARS[mv.promotion_piece_type().x - 3]);
-    if(mv.is_castle())
-    {
-        i = 0;
-        t[i++] = SF_0;
-        t[i++] = SF_DASH;
-        t[i++] = SF_0;
-        if(mv.to().col() < mv.fr().col())
-        {
-            t[i++] = SF_DASH;
-            t[i++] = SF_0;
-        }
-    }
     ++ply;
     
     for(uint8_t i = UNDOHIST_SIZE-1; i > 0; --i)
@@ -189,7 +172,8 @@ static void send_move(ch2k::move mv)
         undohist[0].flags = g.stack_base()->flags;
         undohist[0].half_move = g.stack_base()->half_move;
         sanhist[0] = SF_NULL;
-        if(!p.type().is_pawn()) sanhist[0] = t[0];
+        if(!p.type().is_pawn())
+            sanhist[0] = pgm_read_byte(&SAN_PIECE_CHARS[p.type().x - 3]);
         if(cap) sanhist[0] |= SANFLAG_CAP;
         if(need_rank) sanhist[0] |= SANFLAG_RANK;
         if(need_file) sanhist[0] |= SANFLAG_FILE;
@@ -201,23 +185,9 @@ static void send_move(ch2k::move mv)
     
     n = g.check_status();
     if(n == ch2k::game::STATUS_MATED)
-    {
-        t[i++] = SF_MATE;
         sanhist[0] |= SANFLAG_MATE;
-    }
     else if(n == ch2k::game::STATUS_CHECK || g.in_check)
-    {
-        t[i++] = SF_CHECK;
         sanhist[0] |= SANFLAG_CHECK;
-    }
-    if(i < 7) t[i] = SF_NULL;
-    for(uint8_t j = 0; j < 7; ++j)
-    {
-        for(i = 0; i < MOVEHIST_SIZE * 2 - 1; ++i)
-            movehist[i][j] = movehist[i + 1][j];
-            movehist[i][j] = movehist[i + 1][j];
-        movehist[MOVEHIST_SIZE * 2 - 1][j] = t[j];
-    }
     
     ta = mv.fr().x;
     tb = mv.to().x;
@@ -249,15 +219,16 @@ static void undo_single_ply()
     {
         // add captured piece to piece lists
         pcap = ch2k::piece{ undohist[0].cap };
+        ch2k::square to2 = to;
         if(ep)
         {
-            to = ch2k::square::from_rowcol(fr.row(), to.col());
+            to2 = ch2k::square::from_rowcol(fr.row(), to.col());
             pcap = ch2k::piece::pawn(g.c_);
         }
-        ch2k::piece_index t = g.square_to_index(to);
-        icap = g.add_piece(pcap, to);
+        ch2k::piece_index t = g.square_to_index(to2);
+        icap = g.add_piece(pcap, to2);
         g.index_to_square(icap) = ch2k::square::NOWHERE;
-        g.square_to_index(to) = t;
+        g.square_to_index(to2) = t;
     }
     g.unexecute_move(m, icap, undohist[0].flags, undohist[0].half_move);
         
@@ -265,23 +236,6 @@ static void undo_single_ply()
     --undohist_num;
     for(uint8_t j = 0; j < UNDOHIST_SIZE - 1; ++j)
         undohist[j] = undohist[j + 1];
-    
-    for(uint8_t j = 0; j < 7; ++j)
-    {
-        for(uint8_t i = MOVEHIST_SIZE * 2 - 1; i > 0; --i)
-        {
-            movehist[i][j] = movehist[i - 1][j];
-            movehist[i][j] = movehist[i - 1][j];
-        }
-    }
-    
-    if(ply >= MOVEHIST_SIZE * 2)
-    {
-        get_san_from_hist(
-            movehist[0],
-            g.get_rep_move(MOVEHIST_SIZE * 2 - 1),
-            sanhist[MOVEHIST_SIZE * 2]);
-    }
     for(uint8_t j = 0; j < SANHIST_SIZE - 1; ++j)
         sanhist[j] = sanhist[j + 1];
     
@@ -289,7 +243,11 @@ static void undo_single_ply()
     ta = to.x;
     tb = fr.x;
     tc = g.square_to_piece(fr).x;
-    if(ep) pcap = ch2k::piece::NOTHING;
+    if(ep)
+    {
+        b[fr.row()][to.col()] = pcap;
+        pcap = ch2k::piece::NOTHING;
+    }
     b[to.row()][to.col()] = pcap;
     nframe = 0;
 }
@@ -335,6 +293,7 @@ void loop() {
             {
                 g.new_game();
                 //g.load_fen("8/2P5/8/8/8/8/k6K/8 w - -"); // test promotion
+                //g.load_fen("2k5/8/8/8/4p3/8/5P2/2K5 w - -"); // test ep
                 update_board_cache();
                 state = STATE_NEW_GAME_START;
             }
@@ -457,7 +416,9 @@ void loop() {
         break;
     case STATE_AI:
         g.iterative_deepening();
-        if(g.best_ != ch2k::move::NO_MOVE)
+        if(g.stop_)
+            state = STATE_GAME_PAUSED_START;
+        else if(g.best_ != ch2k::move::NO_MOVE)
             send_move(g.best_);
         else
             state = STATE_GAME_OVER;
@@ -600,8 +561,11 @@ ISR(TIMER3_COMPA_vect)
         state = STATE_AI;
         break;
     case STATE_AI:
+        poll_buttons_during_rendering();
+        if(just_pressed(B_BUTTON))
+            g.stop_ = true;
         render_ai_progress();
-        paint_right_half(false);
+        paint_right_half(g.stop_);
         break;
     case STATE_HUMAN_START:
         render_game_info();
@@ -655,6 +619,14 @@ ISR(TIMER3_COMPA_vect)
             }
             else
                 update_game_state();
+        }
+        poll_buttons_during_rendering();
+        if(just_pressed(B_BUTTON))
+        {
+            if(state == STATE_ANIM_UNDO2)
+                undo_single_ply();
+            update_board_cache();
+            state = STATE_GAME_PAUSED_START;
         }
         break;
     case STATE_GAME_PAUSED_START:
