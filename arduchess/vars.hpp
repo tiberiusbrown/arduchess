@@ -44,6 +44,9 @@ struct save_file_data
   uint16_t ply;
 };
 
+// whether the game was just saved (cleared on each move)
+static bool game_saved;
+
 static constexpr int const EEPROM_END = 1024;
 static constexpr int const EEPROM_SIZE =
   sizeof(save_file_data) * NUM_SAVE_FILES + // save files
@@ -78,6 +81,7 @@ enum {
   STATE_SAVE_OVERWRITE,
   STATE_LOAD_START,
   STATE_LOAD,
+  STATE_EXIT_CONFIRM,
   STATE_GAME_OVER,
 } state;
 

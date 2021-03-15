@@ -10,7 +10,7 @@ static uint8_t const PIECE_IMGS[][7] PROGMEM =
   { 0x00, 0x68, 0x7c, 0x7c, 0x7c, 0x68, 0x00 }, // white pawn
   { 0x00, 0x00, 0x14, 0x00, 0x14, 0x00, 0x00 }, // checkerboard
   { 0x18, 0x1c, 0x4a, 0x7e, 0x7e, 0x7c, 0x70 }, // white knight
-  { 0x20, 0x4c, 0x7e, 0x37, 0x7e, 0x4c, 0x20 }, // white bishop
+  { 0x20, 0x4c, 0x7e, 0x37, 0x7a, 0x4c, 0x20 }, // white bishop
   { 0x46, 0x7c, 0x7e, 0x7c, 0x7e, 0x7c, 0x46 }, // white rook
   { 0x43, 0x64, 0x7d, 0x7e, 0x7d, 0x64, 0x43 }, // white queen
   { 0x44, 0x68, 0x7a, 0x7f, 0x7a, 0x68, 0x44 }, // white king
@@ -339,7 +339,7 @@ static void render_ai_progress()
   constexpr uint8_t h = 3;
   uint8_t level = ailevel[turn.binary_index()]*2 + 2;
   uint8_t progress = uint8_t(g.nodes_ >> level);
-  uint8_t offset = turn.is_white() ? 55 : 5;
+  uint8_t offset = (turn.is_white() ^ rotated) ? 55 : 5;
   for(uint8_t i = 0; i < h; ++i)
     draw_hline(i + offset, xoff, xoff + progress);
   draw_hline(offset - 1, xoff, xoff + 32);
@@ -367,17 +367,35 @@ static void render_promotion_menu()
 
 static void render_new_game_menu()
 {
-  draw_pretty_box(0, 0, 14, 62);
-  draw_small_text_prog(MSG_T_NEW, 8, 5, 15);
-  draw_small_text_prog(MSG_WHITE, 5, 18, 3);
-  draw_small_text_prog(MSG_BLACK, 5, 26, 3);
-  draw_small_text_prog(
-    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tb]), 255, 18, 34);
-  draw_small_text_prog(
-    (uint8_t const*)pgm_read_word(&MSGS_PLAYER[tc]), 255, 26, 34);
-  uint8_t* b = &buf[ta * 64 + 64*2];
-  for(uint8_t i = 33; i < 61; ++i)
-    b[i] ^= 0xfe;
+    draw_pretty_box(0, 0, 14, 62);
+    draw_small_text_prog(MSG_T_NEW, 8, 5, 15);
+    draw_small_text_prog(MSG_P_BACK, 4, 18, 3);
+    draw_small_text_prog(MSG_START_GAME, 10, 26, 3);
+    draw_small_text_prog(MSG_WHITE, 6, 34, 3);
+    draw_small_text_prog(MSG_BLACK, 6, 50, 3);
+    for(uint8_t i = 0; i < 2; ++i)
+    {
+        uint8_t j = i * 16;
+        draw_small_text_prog(
+            (uint8_t const*)pgm_read_word(&MSGS_PLAYER[ailevel[i]]),
+            255, 34 + j, 34);
+        uint8_t const* ct = (uint8_t const*)pgm_read_word(&MSGS_CONTEMPT[aicontempt[i]]);
+        uint8_t cw = small_text_width_prog(ct, 255);
+        draw_small_text_prog(ct, 255, 42 + j, 60 - cw);
+        if(ailevel[i] == 0)
+        {
+            uint8_t* b = &buf[(i * 2 + 5) * 64];
+            for(uint8_t k = 22; k < 61; ++k)
+                b[k] &= 0x55;
+        }
+    }
+    uint8_t* b = &buf[ta * 64 + 64*2];
+    uint8_t x1 = 33, x2 = 61;
+    if(ta == 0) x1 = 2, x2 = 19;
+    if(ta == 1) x1 = 2, x2 = 45;
+    if(ta == 3 || ta == 5) x1 = 21;
+    for(uint8_t i = x1; i < x2; ++i)
+        b[i] ^= 0xfe;
 }
 
 static void render_game_paused()
@@ -451,6 +469,20 @@ static void render_save_game_overwrite()
     draw_small_text_prog(MSG_CANCEL, 6, yo + 16, xo);
     uint8_t* b = &buf[tb * 64 + 64*3];
     for(uint8_t i = xo - 1; i < xo + 39; ++i)
+        b[i] ^= 0xfe;
+}
+
+static void render_exit_confirm()
+{
+    draw_pretty_box(0, 0, 30, 62);
+    draw_small_text_prog(MSG_EXIT_CONFIRM1, 8, 4, 16);
+    draw_small_text_prog(MSG_P_MAIN, 9, 10, 11);
+    draw_small_text_prog(MSG_EXIT_CONFIRM2, 7, 16, 16);
+    draw_small_text_prog(MSG_EXIT_CONFIRM3, 7, 22, 17);
+    draw_small_text_prog(MSG_P_BACK, 4, 34, 11);
+    draw_small_text_prog(MSG_P_MAIN, 9, 42, 11);
+    uint8_t* b = &buf[ta * 64 + 64*4];
+    for(uint8_t i = 10; i < 53; ++i)
         b[i] ^= 0xfe;
 }
 

@@ -101,6 +101,7 @@ static void save_game(uint8_t n)
     eeprom_update(a + offsetof(save_file_data, valid), SAVE_VALID_TAG);
     set_save_checksum(compute_save_checksum());
     checksum_valid = true;
+    game_saved = true;
 }
 
 static void load_game(uint8_t n)

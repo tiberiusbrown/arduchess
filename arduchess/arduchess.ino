@@ -11,36 +11,38 @@
 
 static void update_board_cache()
 {
-  for(uint8_t r = 0; r < 8; ++r)
-    for(uint8_t c = 0; c < 8; ++c)
-    {
-      ch2k::piece_index i = g.square_to_index(
-        ch2k::square::from_rowcol(r, c));
-      b[r][c] = i.is_nothing() ? ch2k::piece::NOTHING : g.index_to_piece(i);
-    }
+    for(uint8_t r = 0; r < 8; ++r)
+        for(uint8_t c = 0; c < 8; ++c)
+        {
+            ch2k::piece_index i = g.square_to_index(
+                ch2k::square::from_rowcol(r, c));
+            b[r][c] = i.is_nothing() ? ch2k::piece::NOTHING : g.index_to_piece(i);
+        }
 }
 
 static void update_game_state()
 {
-  turn = g.c_;
-  uint8_t ci = turn.binary_index();
-  game_status = g.check_status();
-  if(game_status > ch2k::game::STATUS_CHECK)
-    state = STATE_GAME_OVER;
-  else if(ailevel[ci] != 0)
-  {
-    if(ailevel[!ci] == 0)
-      rotated = turn.is_white();
-    g.max_depth_ = 8;
-    g.max_nodes_ = uint16_t(1) << (ailevel[ci]*2 + 7);
-    g.contempt_ = aicontempt[ci];
-    state = STATE_AI_START;
-  }
-  else
-  {
-    rotated = turn.is_black();
-    state = STATE_HUMAN_START;
-  }
+    static uint8_t const CONTEMPT_VALS[NUM_MSGS_CONTEMPT] PROGMEM =
+    { 0, 16, 64 };
+    turn = g.c_;
+    uint8_t ci = turn.binary_index();
+    game_status = g.check_status();
+    if(game_status > ch2k::game::STATUS_CHECK)
+        state = STATE_GAME_OVER;
+    else if(ailevel[ci] != 0)
+    {
+        if(ailevel[!ci] == 0)
+            rotated = turn.is_white();
+        g.max_depth_ = 8;
+        g.max_nodes_ = uint16_t(1) << (ailevel[ci]*2 + 7);
+        g.contempt_ = pgm_read_byte(&CONTEMPT_VALS[aicontempt[ci]]);
+        state = STATE_AI_START;
+    }
+    else
+    {
+        rotated = turn.is_black();
+        state = STATE_HUMAN_START;
+    }
 }
 
 static void update_game_state_after_move()
@@ -105,6 +107,7 @@ static void setup_for_game()
     ply = 0;
     undohist_num = 0;
     rotated = false;
+    game_saved = true;
 }
 
 void setup() {
@@ -189,6 +192,8 @@ static void send_move(ch2k::move mv)
     else if(n == ch2k::game::STATUS_CHECK || g.in_check)
         sanhist[0] |= SANFLAG_CHECK;
     
+    game_saved = false;
+    
     ta = mv.fr().x;
     tb = mv.to().x;
     tc = p.x;
@@ -239,6 +244,8 @@ static void undo_single_ply()
     for(uint8_t j = 0; j < SANHIST_SIZE - 1; ++j)
         sanhist[j] = sanhist[j + 1];
     
+    game_saved = false;
+    
     // anim info
     ta = to.x;
     tb = fr.x;
@@ -261,6 +268,20 @@ static void undo_move()
         state = STATE_ANIM_UNDO2;
     else
         state = STATE_ANIM_UNDO;
+}
+
+static void new_game_cycle_option(bool reverse)
+{
+    if(ta < 2) return;
+    uint8_t n;
+    uint8_t* t;
+    uint8_t i = (ta >> 1) - 1;
+    if(ta & 1)
+        n = NUM_MSGS_CONTEMPT, t = &aicontempt[i];
+    else
+        n = NUM_MSGS_PLAYER, t = &ailevel[i];
+    if( reverse && --*t >= n) *t = n - 1;
+    if(!reverse && ++*t >= n) *t = 0;
 }
 
 void loop() {
@@ -294,6 +315,7 @@ void loop() {
                 g.new_game();
                 //g.load_fen("8/2P5/8/8/8/8/k6K/8 w - -"); // test promotion
                 //g.load_fen("2k5/8/8/8/4p3/8/5P2/2K5 w - -"); // test ep
+                //g.load_fen("8/6p1/8/7P/8/8/8/K1k5 b - -");
                 update_board_cache();
                 state = STATE_NEW_GAME_START;
             }
@@ -313,30 +335,35 @@ void loop() {
     case STATE_NEW_GAME:
         if(just_pressed(LEFT_BUTTON))
         {
-            uint8_t& t = ta == 0 ? tb : tc;
-            if(--t >= NUM_MSGS_PLAYER) t = NUM_MSGS_PLAYER - 1;
+            new_game_cycle_option(true);
         }
-        else if(just_pressed(RIGHT_BUTTON))
+        else if(just_pressed(RIGHT_BUTTON) && ta > 1)
         {
-            uint8_t& t = ta == 0 ? tb : tc;
-            if(++t >= NUM_MSGS_PLAYER) t = 0;
+            new_game_cycle_option(false);
         }
         else if(just_pressed(UP_BUTTON))
         {
-            if(--ta >= 2) ta = 1;
+            if(--ta >= 6) ta = 5;
+            if(ta == 3 && ailevel[0] == 0) ta = 2;
+            if(ta == 5 && ailevel[1] == 0) ta = 4;
         }
         else if(just_pressed(DOWN_BUTTON))
         {
-            if(++ta >= 2) ta = 0;
+            if(++ta >= 6) ta = 0;
+            if(ta == 3 && ailevel[0] == 0) ta = 4;
+            if(ta == 5 && ailevel[1] == 0) ta = 0;
         }
         else if(just_pressed(A_BUTTON))
         {
-            ailevel[0] = tb;
-            ailevel[1] = tc;
-            aicontempt[0] = 0;
-            aicontempt[1] = 0;
-            setup_for_game();
-            update_game_state();
+            if(ta == 0)
+                state = STATE_TITLE_START;
+            else if(ta == 1)
+            {
+                setup_for_game();
+                update_game_state();
+            }
+            else
+                new_game_cycle_option(false);
         }
         else if(just_pressed(B_BUTTON))
             state = STATE_TITLE_START;
@@ -423,6 +450,17 @@ void loop() {
         else
             state = STATE_GAME_OVER;
         break;
+    case STATE_ANIM:
+    case STATE_ANIM_UNDO:
+    case STATE_ANIM_UNDO2:
+        if(just_pressed(B_BUTTON))
+        {
+            if(state == STATE_ANIM_UNDO2)
+                undo_single_ply();
+            update_board_cache();
+            state = STATE_GAME_PAUSED_START;
+        }
+        break;
     case STATE_GAME_OVER:
         if(just_pressed(B_BUTTON))
             state = STATE_GAME_PAUSED_START;
@@ -445,7 +483,10 @@ void loop() {
                 case 0: update_game_state(); break;
                 case 1: undo_move(); break;
                 case 2: ta = tc = 0; state = STATE_SAVE_START; break;
-                case 3: state = STATE_TITLE_START; break;
+                case 3:
+                    ta = 0;
+                    state = game_saved ? STATE_TITLE_START : STATE_EXIT_CONFIRM;
+                    break;
                 default: break;
             }
         }
@@ -514,6 +555,13 @@ void loop() {
             else
                 state = STATE_SAVE;
         }
+    case STATE_EXIT_CONFIRM:
+        if(just_pressed(UP_BUTTON) || just_pressed(DOWN_BUTTON))
+            ta = !ta;
+        else if(just_pressed(B_BUTTON))
+            state = STATE_GAME_PAUSED_START;
+        else if(just_pressed(A_BUTTON))
+            state = ta ? STATE_TITLE_START : STATE_GAME_PAUSED_START;
     default: break;
     }
     
@@ -546,8 +594,8 @@ ISR(TIMER3_COMPA_vect)
         render_board();
         paint_left_half(true);
         ta = 0;
-        tb = 0;
-        tc = 2;
+        ailevel[0] = 0;
+        ailevel[1] = 1;
         state = STATE_NEW_GAME;
     case STATE_NEW_GAME:
         render_new_game_menu();
@@ -620,14 +668,6 @@ ISR(TIMER3_COMPA_vect)
             else
                 update_game_state();
         }
-        poll_buttons_during_rendering();
-        if(just_pressed(B_BUTTON))
-        {
-            if(state == STATE_ANIM_UNDO2)
-                undo_single_ply();
-            update_board_cache();
-            state = STATE_GAME_PAUSED_START;
-        }
         break;
     case STATE_GAME_PAUSED_START:
         render_board();
@@ -648,6 +688,10 @@ ISR(TIMER3_COMPA_vect)
         break;
     case STATE_SAVE_OVERWRITE:
         render_save_game_overwrite();
+        paint_right_half(true);
+        break;
+    case STATE_EXIT_CONFIRM:
+        render_exit_confirm();
         paint_right_half(true);
         break;
     case STATE_GAME_OVER:

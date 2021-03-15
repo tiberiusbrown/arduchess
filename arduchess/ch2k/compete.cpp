@@ -29,6 +29,13 @@ static int compete(std::string const& fen, bool new_is_white)
     g_new.max_nodes_ = g_old.max_nodes_ = NODE_LIMIT;
     g_new.max_depth_ = g_old.max_depth_ = DEPTH_LIMIT;
 
+    g_new.contempt_ = g_old.contempt_ = 0;
+
+    //g_old.max_nodes_ = 512;
+    //g_old.max_depth_ = 1;
+    //g_new.max_nodes_ = 8192;
+    //g_new.contempt_ = 16;
+
     for(;;)
     {
         // check status of game

@@ -16,7 +16,7 @@ enum
 
   // other letters for spelling game status
   SF_C, SF_H, SF_E, SF_M, SF_A, SF_T, SF_D, SF_W, SF_S, SF_L,
-  SF_P, SF_I, SF_O, SF_V, SF_U, SF_G,
+  SF_P, SF_I, SF_O, SF_V, SF_U, SF_G, SF_F,
   
   SF_COLON, SF_QUESTION, SF_SPACE, SF_SPACE3, SF_CHECKMARK,
 };
@@ -38,9 +38,9 @@ static uint8_t const MSG_DEPTH[] PROGMEM =
 static uint8_t const MSG_HUMAN[] PROGMEM =
 { SF_H, SF_U, SF_M, SF_A, SF_N, SF_NULL };
 static uint8_t const MSG_WHITE[] PROGMEM =
-{ SF_W, SF_H, SF_I, SF_T, SF_E };
+{ SF_W, SF_H, SF_I, SF_T, SF_E, SF_COLON };
 static uint8_t const MSG_BLACK[] PROGMEM =
-{ SF_B, SF_L, SF_A, SF_C, SF_K };
+{ SF_B, SF_L, SF_A, SF_C, SF_K, SF_COLON };
 
 static uint8_t const MSG_T_NEW[] PROGMEM =
 { SF_N, SF_E, SF_W, SF_SPACE, SF_G, SF_A, SF_M, SF_E, SF_NULL };
@@ -57,6 +57,9 @@ static uint8_t const * const MSGS_TITLE[] PROGMEM =
 };
 static constexpr uint8_t const NUM_MSGS_TITLE =
   sizeof(MSGS_TITLE) / sizeof(MSGS_TITLE[0]);
+
+static uint8_t const MSG_START_GAME[] PROGMEM =
+{ SF_S, SF_T, SF_A, SF_R, SF_T, SF_SPACE, SF_G, SF_A, SF_M, SF_E };
 
 static uint8_t const MSG_LEVEL_1[] PROGMEM =
 { SF_L, SF_E, SF_V, SF_E, SF_L, SF_SPACE, SF_1, SF_NULL };
@@ -104,6 +107,27 @@ static uint8_t const MSG_OVERWRITE_SAVE[] PROGMEM =
 };
 static uint8_t const MSG_CANCEL[] PROGMEM =
 { SF_C, SF_A, SF_N, SF_C, SF_E, SF_L };
+
+static uint8_t const MSG_C_STANDARD[] PROGMEM =
+{ SF_S, SF_T, SF_A, SF_N, SF_D, SF_A, SF_R, SF_D, SF_NULL };
+static uint8_t const MSG_C_CONFIDENT[] PROGMEM =
+{ SF_C, SF_O, SF_N, SF_F, SF_I, SF_D, SF_E, SF_N, SF_T, SF_NULL };
+static uint8_t const MSG_C_ARROGANT[] PROGMEM =
+{ SF_A, SF_R, SF_R, SF_O, SF_G, SF_A, SF_N, SF_T, SF_NULL };
+
+static uint8_t const * const MSGS_CONTEMPT[] PROGMEM =
+{
+    MSG_C_STANDARD, MSG_C_CONFIDENT, MSG_C_ARROGANT,
+};
+static constexpr uint8_t const NUM_MSGS_CONTEMPT =
+  sizeof(MSGS_CONTEMPT) / sizeof(MSGS_CONTEMPT[0]);
+  
+static uint8_t const MSG_EXIT_CONFIRM1[] PROGMEM =
+{ SF_L, SF_E, SF_A, SF_V, SF_E, SF_SPACE, SF_T, SF_O };
+static uint8_t const MSG_EXIT_CONFIRM2[] PROGMEM =
+{ SF_W, SF_I, SF_T, SF_H, SF_O, SF_U, SF_T };
+static uint8_t const MSG_EXIT_CONFIRM3[] PROGMEM =
+{ SF_S, SF_A, SF_V, SF_I, SF_N, SF_G, SF_QUESTION };
 
 static uint8_t const SMALL_FONT[] PROGMEM =
 {
@@ -160,6 +184,7 @@ static uint8_t const SMALL_FONT[] PROGMEM =
   3, 0x07, 0x18, 0x07,             // V
   4, 0x0f, 0x10, 0x10, 0x0f,       // U
   4, 0x0e, 0x11, 0x15, 0x1d,       // G
+  3, 0x1f, 0x05, 0x01,             // F
   
   1, 0x0a,                         // colon
   3, 0x01, 0x15, 0x02,             // question
