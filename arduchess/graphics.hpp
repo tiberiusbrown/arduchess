@@ -141,7 +141,7 @@ static void render_anim()
   x = uint8_t((uint16_t(x) * (bx - ax) + 32) >> 6) + ax;
   //ch2k::piece p = g.square_to_piece(ch2k::square{tb});
   //if(g.stack().lastmove.is_promotion())
-  //  p = g.c_.is_white() ? ch2k::piece::BP : ch2k::piece::WP;
+  //  p = g.gd.c_.is_white() ? ch2k::piece::BP : ch2k::piece::WP;
   draw_piece_unaligned(
     get_piece_img(ch2k::piece{ tc }),
     buf, y, x);
@@ -202,12 +202,13 @@ static void render_game_info_side(ch2k::piece_color c, uint8_t yo)
 {
   constexpr uint8_t giw = 63;
   constexpr uint8_t gih = 13;
+  uint8_t ci = c.binary_index();
 
   // draw boxes
   draw_pretty_box(yo, 0, yo + gih - 1, giw - 1);
 
   // draw current turn indicator
-  if(state != STATE_GAME_OVER && turn == c)
+  if(state != STATE_GAME_OVER && turn == ci)
   {
     uint8_t y = yo + 2;
     for(uint8_t i = 3; i < giw-3; i += 2)
@@ -223,7 +224,6 @@ static void render_game_info_side(ch2k::piece_color c, uint8_t yo)
   }
 
   // draw ai face and info
-  uint8_t ci = c.binary_index();
   if(ailevel[ci] != 0)
   {
     uint8_t t = SF_BIGFROWN + aihappy[ci];
@@ -236,8 +236,8 @@ static void render_game_info_side(ch2k::piece_color c, uint8_t yo)
   {
     draw_small_text_prog(MSG_HUMAN, 5, yo+4, 4);
   }
-  if(!(turn == c && (ailevel[ci] != 0) && state == STATE_AI_START))
-    draw_small_text_prog(c.is_white() ? MSG_WHITE : MSG_BLACK, 5, yo+4, 35);
+  if(!(turn == ci && (ailevel[ci] != 0) && state == STATE_AI_START))
+    draw_small_text_prog(ci ? MSG_BLACK : MSG_WHITE, 5, yo+4, 35);
 }
 
 static void render_game_info()
@@ -246,7 +246,7 @@ static void render_game_info()
     render_game_info_side(ch2k::piece_color::B, rotated ? 50 : 0);
     
     uint8_t y = 14 + 6 * 5;
-    uint16_t move_counter = (ply + 1) / 2;
+    uint16_t move_counter = (g.gd.ply_ + 1) / 2;
     if(move_counter < MOVEHIST_SIZE)
         y -= (MOVEHIST_SIZE - (uint8_t)move_counter) * 6;
     else if(state == STATE_GAME_OVER)
@@ -254,10 +254,10 @@ static void render_game_info()
     uint8_t t[8];
     for(uint8_t i = 0; y >= 14; ++i)
     {
-        if(i >= ply) break;
+        if(i >= g.gd.ply_) break;
         uint8_t x, x2;
         get_san_from_hist(t, g.get_rep_move(i), sanhist[i]);
-        if(((i ^ ply) & 1) != 0)
+        if(((i ^ g.gd.ply_) & 1) != 0)
         {
             x = (small_text_width(t, 7) + 0) >> 1;
             if(x > 12) x = 12;
@@ -295,7 +295,7 @@ static void render_game_info()
             }
         }
     }
-    if(ply == 0) return;
+    if(g.gd.ply_ == 0) return;
     uint8_t n[3];
     {
         n[2] = SF_0 + move_counter % 10;
@@ -337,9 +337,9 @@ static void render_ai_progress()
 {
   constexpr uint8_t xoff = 25;
   constexpr uint8_t h = 3;
-  uint8_t level = ailevel[turn.binary_index()]*2 + 2;
+  uint8_t level = ailevel[turn]*2 + 2;
   uint8_t progress = uint8_t(g.nodes_ >> level);
-  uint8_t offset = (turn.is_white() ^ rotated) ? 55 : 5;
+  uint8_t offset = ((!turn) ^ rotated) ? 55 : 5;
   for(uint8_t i = 0; i < h; ++i)
     draw_hline(i + offset, xoff, xoff + progress);
   draw_hline(offset - 1, xoff, xoff + 32);
@@ -358,7 +358,7 @@ static void render_promotion_menu()
   p = buf + 64*4 + 12;
   for(uint8_t i = 0; i <= 38; ++i) *p++ &= 0xf8;
   draw_pretty_box(20, 12, 34, 50);
-  uint8_t po = g.c_.is_white() ? 0 : 6;
+  uint8_t po = g.gd.c_.is_white() ? 0 : 6;
   draw_piece_aligned(PIECE_IMGS[po + 2], buf + 64 * 3 + 16);
   draw_piece_aligned(PIECE_IMGS[po + 3], buf + 64 * 3 + 24);
   draw_piece_aligned(PIECE_IMGS[po + 4], buf + 64 * 3 + 32);

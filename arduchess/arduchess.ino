@@ -24,37 +24,36 @@ static void update_game_state()
 {
     static uint8_t const CONTEMPT_VALS[NUM_MSGS_CONTEMPT] PROGMEM =
     { 0, 16, 64 };
-    turn = g.c_;
-    uint8_t ci = turn.binary_index();
+    turn = g.gd.c_.binary_index();
     game_status = g.check_status();
     if(game_status > ch2k::game::STATUS_CHECK)
         state = STATE_GAME_OVER;
-    else if(ailevel[ci] != 0)
+    else if(ailevel[turn] != 0)
     {
-        if(ailevel[!ci] == 0)
-            rotated = turn.is_white();
+        if(ailevel[!turn] == 0)
+            rotated = !turn;
         g.max_depth_ = 8;
-        g.max_nodes_ = uint16_t(1) << (ailevel[ci]*2 + 7);
-        g.contempt_ = pgm_read_byte(&CONTEMPT_VALS[aicontempt[ci]]);
+        g.max_nodes_ = uint16_t(1) << (ailevel[turn]*2 + 7);
+        g.contempt_ = pgm_read_byte(&CONTEMPT_VALS[aicontempt[turn]]);
         state = STATE_AI_START;
     }
     else
     {
-        rotated = turn.is_black();
+        rotated = !!turn;
         state = STATE_HUMAN_START;
     }
 }
 
 static void update_game_state_after_move()
 {
-  if(ailevel[turn.binary_index()] != 0)
+  if(ailevel[turn] != 0)
   {
     u8 happy = 2;
     if(g.score_ < -850) happy = 0;
     else if(g.score_ < -250) happy = 1;
     else if(g.score_ > +850) happy = 4;
     else if(g.score_ > +250) happy = 3;
-    aihappy[turn.binary_index()] = happy;
+    aihappy[turn] = happy;
   }
   update_game_state();
 }
@@ -104,7 +103,6 @@ static void setup_for_game()
     cx = 4 * 8;
     cy = 6 * 8;
     aihappy[0] = aihappy[1] = 2;
-    ply = 0;
     undohist_num = 0;
     rotated = false;
     game_saved = true;
@@ -162,7 +160,6 @@ static void send_move(ch2k::move mv)
         (!mv.is_promotion() && mv.is_en_passant());
     if(p.type().is_pawn() && cap)
         need_file = true;
-    ++ply;
     
     for(uint8_t i = UNDOHIST_SIZE-1; i > 0; --i)
         undohist[i] = undohist[i - 1];
@@ -204,7 +201,7 @@ static void send_move(ch2k::move mv)
 
 static void undo_single_ply()
 {
-    if(ply == 0 || undohist_num == 0) return;
+    if(g.gd.ply_ == 0 || undohist_num == 0) return;
 
     ch2k::move m = g.get_rep_move(0);
     ch2k::piece_index icap;
@@ -228,7 +225,7 @@ static void undo_single_ply()
         if(ep)
         {
             to2 = ch2k::square::from_rowcol(fr.row(), to.col());
-            pcap = ch2k::piece::pawn(g.c_);
+            pcap = ch2k::piece::pawn(g.gd.c_);
         }
         ch2k::piece_index t = g.square_to_index(to2);
         icap = g.add_piece(pcap, to2);
@@ -237,7 +234,6 @@ static void undo_single_ply()
     }
     g.unexecute_move(m, icap, undohist[0].flags, undohist[0].half_move);
         
-    --ply;
     --undohist_num;
     for(uint8_t j = 0; j < UNDOHIST_SIZE - 1; ++j)
         undohist[j] = undohist[j + 1];
@@ -261,10 +257,8 @@ static void undo_single_ply()
 
 static void undo_move()
 {
-    uint8_t ti1 = turn.binary_index();
-    uint8_t ti2 = !ti1;
     undo_single_ply();
-    if(ailevel[ti1] == 0 && ailevel[ti2] > 0)
+    if(ailevel[turn] == 0 && ailevel[!turn] > 0)
         state = STATE_ANIM_UNDO2;
     else
         state = STATE_ANIM_UNDO;
@@ -310,6 +304,12 @@ void loop() {
         }
         else if(just_pressed(A_BUTTON))
         {
+            // seed random number generator
+            {
+                uint32_t t = Arduboy2Core::generateRandomSeed();
+                rand_state0 = uint16_t(t);
+                rand_state1 = uint16_t(t >> 16);
+            }
             if(ta == 0)
             {
                 g.new_game();
@@ -417,7 +417,7 @@ void loop() {
             ch2k::square s = ch2k::square::from_rowcol(cyi, cxi);
             if(state == STATE_HUMAN)
             {
-                if(b[cyi][cxi].color() == turn)
+                if(b[cyi][cxi].color() == g.gd.c_)
                 {
                     state = STATE_HUMAN_MOVE;
                     ta = s.x;
@@ -425,7 +425,7 @@ void loop() {
             }
             else
             {
-                if(b[cyi][cxi].color() == turn)
+                if(b[cyi][cxi].color() == g.gd.c_)
                 {
                     ta = s.x;
                 }
@@ -442,7 +442,8 @@ void loop() {
         }
         break;
     case STATE_AI:
-        g.iterative_deepening();
+        g.ai_move();
+        //g.iterative_deepening();
         if(g.stop_)
             state = STATE_GAME_PAUSED_START;
         else if(g.best_ != ch2k::move::NO_MOVE)

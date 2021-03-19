@@ -22,6 +22,13 @@
 #include <array>
 #endif
 
+// expects CH2K_RAND to be uint8_t(void)
+#ifndef CH2K_RAND
+#include <stdlib.h>
+static uint8_t ch2k_rand__INTERNAL__() { return (uint8_t)rand(); }
+#define CH2K_RAND ch2k_rand__INTERNAL__
+#endif
+
 #ifndef CH2K_PRINTF
 #ifdef _MSC_VER
 #include <stdio.h>
@@ -76,6 +83,153 @@ using s8 = int8_t;
 
 using u16 = uint16_t;
 using s16 = int16_t;
+
+// i know it's not uniform i don't care
+static u8 nrand(u8 n)
+{
+    u8 r = CH2K_RAND();
+    while(r >= n) r -= n; // avoids modulo
+    return r;
+}
+
+// opening book encoding:
+// tree of moves, each byte is a move
+// bits 0-5 (values 0-63) are index of move from move generator
+//     note this cannot support opening positions with >64 legal moves
+// bit 7 indicates the move has children (immediately following)
+// bit 6 indicates the last child move of its parent move
+// tree is serialized depth-first (children immediately follow parents)
+static u8 const OPENING_BOOK[1022] PROGMEM =
+{
+    145,   5, 199, 133,  81,  71, 146,  17,
+    146,   2, 133, 130, 142,  85, 134,  71,
+     73, 133, 141,  13,  69,  72,   4, 136,
+    142,  24,  71,   6, 201,   0,   2,  71,
+    202, 142,  21,  71, 201,  85, 135,   8,
+     74, 136, 199,  69, 202, 131, 213,  85,
+    130, 213,  85, 135, 213,   4,   7,  73,
+    202, 194,  85, 130, 202, 211,  85, 133,
+      2,   4, 133, 143,  13, 197,  68, 208,
+     77,   9, 202, 144,  85,  75, 132, 197,
+     70, 135, 130, 153,  84, 210,  85, 133,
+    132,   2, 200,  81, 135, 195,  73, 200,
+    202,  82,   6, 135, 145,  25, 197,   4,
+     71,   5, 196,  69, 136, 210,  69, 202,
+    153, 212,  17,   4,  71, 146, 213,  68,
+    133,  85, 132, 149,  26,  80,  69, 203,
+    213,  83, 134, 199, 216,  72, 136, 133,
+      2,  71, 135, 209,  91,  74, 139, 199,
+     81, 204, 133,  83,   7,  73, 130, 146,
+     83,   5, 135, 211, 153,   9, 204,  91,
+     18, 197,  71, 134, 211,  72, 201, 211,
+    208, 199,  82, 131,   7, 201, 211, 215,
+    212,  80, 133,  17, 146, 144, 133,  83,
+    135, 196,  83, 137, 148,  78, 203,  88,
+    136, 148,  24,  71, 134,  88, 200,   5,
+     71, 202, 203,  85, 145,   4, 200,  73,
+    134,  72, 203,   4, 201,  82, 130, 144,
+    211,  72, 198,  83, 133, 143, 143, 202,
+     74, 144,  71,  74, 144, 143,  77, 208,
+    205,   5,  70, 202, 202, 209,  81, 132,
+    145, 198, 136,  81,  74, 134, 198,  81,
+    136,  70,  75, 134,  70, 137, 144, 151,
+    143,  22,  65,  19, 202,  90, 144, 148,
+     18,  72,   7, 203,  73, 145, 148,  78,
+    203,  24,  87, 198,  84, 145, 208,  78,
+      5, 203, 144,  82, 145, 210,  71,  68,
+    136, 144,  23, 199, 199,  81, 145,  17,
+    199,  74, 134, 199,  79, 203, 199, 211,
+     18,  70,  11, 204, 144, 147,  75,  17,
+    197, 202,  81,  17, 134, 211,  79, 136,
+    147, 198,  70, 134,  15, 198,  72, 201,
+    198,  80, 203, 211, 210,  69, 135, 145,
+     69, 146, 152,  74, 153, 144, 153,   5,
+     71,  29,  77, 133, 216,  75, 135, 150,
+     70, 144,  69, 198,  69, 134, 215,  71,
+    200, 145,  74,  72, 144, 199,  88, 146,
+    130,  73, 133,   5, 135,   3,  70, 200,
+     71, 135, 133,   4,  71,   6,  72, 134,
+     73, 136, 154,  66, 155,   5,  74, 133,
+     24,   2,  69,   7, 201,  67, 202, 154,
+     85, 155,  84, 133,  85, 201,  85, 133,
+    143, 209,  70, 130, 209,  71, 133, 145,
+     68, 197,   3,   5,  71, 132, 209,  70,
+    135, 207,  73, 134, 143,  15,  72,  81,
+    137, 197,  15,  80, 136, 143,  24,  71,
+    145,  24,   2,   5,   4,  71, 202,  24,
+      5,  71, 202, 143,  21,  71, 145,  85,
+    136,  72, 202,  21,   5,  68, 136, 198,
+     79, 203,  69, 133, 199, 199, 201,  69,
+    132, 146, 198, 154,  74,  69, 133,  70,
+     72, 135, 151, 145, 198,  69, 197,  71,
+    152, 144,  86,   4,  75, 143,  81, 145,
+    145, 153,  69, 133,  68, 198,  69, 133,
+    199,  81, 132,  89, 198,  69, 133, 152,
+    209,  71, 144, 209,  89, 146, 209,  68,
+    133,  68, 132, 143,  16,   5,  70, 145,
+     16,  70, 132,  68, 198,  80, 134, 144,
+     18,  64, 133,  69, 198,  16,  18,   5,
+     72, 136, 198,  71, 199, 143,  23,  20,
+     17,   0,   5,  68, 145,  17,   4,  70,
+    196,  70, 198, 209, 197,  68, 134, 146,
+    152,  69, 146, 197,  73,  75, 133, 200,
+    144,  71, 210,  72, 200, 210, 207,  73,
+    136, 146,  17,   5,   7,  74, 133, 151,
+    128,  65, 131,  74,  66, 145, 207,  88,
+    130,  79, 135,  79, 202, 202,  80, 136,
+    199, 143,  87,  16,   7, 198,  70,  75,
+    139, 153,  11,  76, 144, 145, 217,  71,
+     71, 146, 209,  73, 133, 209,  15, 202,
+     72, 136, 202, 206,  81, 203, 209, 211,
+      6,   8,  75, 204, 146,  19,  81, 133,
+    147,  79,  81, 200, 211,  79, 137, 145,
+     16,  81, 146, 144, 135, 135,  82, 198,
+     83,   6,  73, 200, 210,  16, 133,  82,
+    135,  70, 203,  70, 130, 199, 211,  85,
+    133,  15, 144, 144, 152,  80,  18,  20,
+      8, 201,  75,   0, 133, 146,  81,  72,
+    199,  18,  72, 147, 144,  80, 145, 208,
+     69,  69, 145, 144, 152,  19,   4,   6,
+     74, 142,   5,   8,   7,  75,   4,   6,
+    199,  68, 145, 206,  69, 128,  68, 133,
+    152,   0,   3,  66, 151,  80, 142,  17,
+     64, 132,  81, 135,  18,  68,  73, 135,
+    142,  15,  64, 130,  66, 132,  70, 133,
+     78, 134,  79, 135,  68, 201,  79, 203,
+    199,  83,   0, 130, 208,  92, 132, 145,
+    199,  81, 130, 198,  84, 134, 199,  84,
+    199,  15, 198,  71, 134,  80, 135, 196,
+    196,  68, 138, 197,  80,  75, 132, 144,
+    198, 211,  27,  69, 147, 198,  73, 145,
+    198, 207,  91, 133, 198,  72, 134, 198,
+    209,   8,  75, 199, 134, 143,  69, 144,
+     69, 135,  23,  68, 134,  68, 200,  70,
+     75, 135, 145,   4, 199,  80, 200, 145,
+     71, 213, 143,  27,  19,  85,  80, 134,
+     16,  17, 199, 146, 149,  72, 143,   4,
+      8,  73, 200,  72, 203, 207,  83, 137,
+    149, 149, 207,  78,  15, 208,  14, 197,
+     13,  68, 143, 143, 200,  86, 208, 135,
+     71, 200,  86, 144, 143, 151,  21,  13,
+     16,  18,   0,   3,   6,  71, 150,  22,
+     81, 141,  23,  17,  72, 132,  17,  69,
+    199,  70, 144, 141,  23,  77, 142,  70,
+    199,  80, 134,  22, 199,  71,  73, 135,
+    200,  16, 154,  79,  68, 201, 150, 208,
+     69, 144,  80, 156, 192,  97, 135, 200,
+     70, 200, 148,  17,  71, 207,  19,  18,
+     16,   7,   6,  75, 136, 144, 199,  69,
+    145,  71,  25, 134, 199, 209,  82, 199,
+      2,   5, 199, 143,  23,  15,  17,  70,
+    144,  20,  15,  17,   0,   5,  70, 135,
+      2,  69, 198,  70, 204,  17,   5, 199,
+    147, 143,   4,  70, 145,  70,  68, 198,
+    143,  64, 145,  19,  81, 200,  81, 139,
+    146,  81, 133,  81, 135,  81, 137, 202,
+    198, 210,  70, 204, 145, 199, 203,  68,
+     73, 204,  18, 135, 147,  82,  81, 137,
+     19, 197, 196, 198,  72,  76,
+};
 
 static constexpr u8 const PVALS[] PROGMEM =
 {
@@ -729,6 +883,14 @@ struct game
     constexpr piece_index square_to_index(square s) const { return square_to_index_[s.x]; }
     piece_index& square_to_index(square s) { return square_to_index_[s.x]; }
 
+    // index into OPENING_BOOK (offset by 1 so zero value is no book)
+    //u16 opening_index_; // moved to grouped_data
+    move opening_index_move_;
+    u16 opening_index_next_;
+
+    // sets best_ to randomly selected move from opening book
+    void find_opening_move();
+
     // state stack embedded in square_to_index_ array
     // (exactly sized to use up all available free space)
     struct state
@@ -872,7 +1034,6 @@ struct game
         square_to_index(s) = i;
     }
 
-    piece_color c_; // whose turn it is
     u8 in_check;
 
     static constexpr u8 const GEN_MOVES_OUT_OF_MEM = 255;
@@ -882,7 +1043,7 @@ struct game
     // remove noncaptures
     u8 reduce_qsearch(move* m, u8 n);
 
-    u8 order_moves(move* m, u8 n, u8 depth); // returns starting index of bad caps
+    u8 order_moves(move* m, u8 n); // returns starting index of bad caps
     s8 see_square(square s);
     s8 see_capture(move mv);
 
@@ -933,12 +1094,12 @@ struct game
     {
         //score r = eval_side<true>() - eval_side<false>();
         score r = eval_side(true) - eval_side(false);
-        if(c_.is_white())
+        if(gd.c_.is_white())
             r += CH2K_GET_EVAL_SETTING(tempo);
         else
             r -= CH2K_GET_EVAL_SETTING(tempo);
 #if CH2K_TUNABLE_EVAL
-        eval_gradient_.v.tempo += c_.is_white() ? 1.0 : -1.0;
+        eval_gradient_.v.tempo += gd.c_.is_white() ? 1.0 : -1.0;
 #endif
         return r;
     }
@@ -948,9 +1109,9 @@ struct game
         ++nodes_;
         score r;
         // endgame produces relative score
-        if(endgame(r, state_index)) return r;
+        if(endgame(r)) return r;
         r = eval();
-        if(!c_.is_white()) r = -r;
+        if(!gd.c_.is_white()) r = -r;
         return r;
     }
 
@@ -977,62 +1138,44 @@ struct game
     bool check_draw_material_side(piece_color c);
 
     // check for draw by material or specific endgame scenario
-    bool endgame(score& s, u8 depth);
+    bool endgame(score& s);
     // check one side for combinations
-    bool endgame_side(piece_color c, score& s, u8 depth);
+    bool endgame_side(piece_color c, score& s);
 
-    score qsearch(move* m, score a, score b, u8 depth);
-    score negamax(move* m, score a, score b, u8 depth, u8 max_depth);
+    score qsearch(move* m, score a, score b);
+    score negamax(move* m, score a, score b, u8 max_depth);
     score negamax_root(score a, score b);
     score aspiration_window(u8 depth, score prev_score);
+    void ai_move(); // either find_opening_move or iterative_deepening
     void iterative_deepening();
 
     static constexpr u8 const REP_MOVES_EXTRA = 12; // for undo
     static constexpr u8 const REP_MOVES_SIZE = 100 + REP_MOVES_EXTRA;
+
+    struct
+    {
+        piece_color c_; // whose turn it is
+        u16 ply_;
+        u16 opening_index_;
 #if CH2K_USE_STD_ARRAY
-    std::array<move, REP_MOVES_SIZE> rep_moves_;
+        std::array<move, REP_MOVES_SIZE> rep_moves_;
 #else
-    move rep_moves_[REP_MOVES_SIZE];
+        move rep_moves_[REP_MOVES_SIZE];
 #endif
+    } gd;
 
-    move get_rep_move(u8 n)
+    constexpr move get_rep_move(u8 n) const
     {
-        return rep_moves_[n];
-        //if(n >= rep_move_head_)
-        //    n = REP_MOVES_SIZE - 1 - (n - rep_move_head_);
-        //else
-        //    n = rep_move_head_ - n - 1;
-        //return rep_moves_[n];
+        return gd.rep_moves_[n];
     }
 
-    void execute_move(move m)
-    {
-        for(u8 i = REP_MOVES_SIZE - 1; i > 0; --i)
-            rep_moves_[i] = rep_moves_[i - 1];
-        rep_moves_[0] = m;
-        do_move(m);
-        stack_reset();
-    }
-    void unexecute_move(move m, piece_index cap, u8 flags, u8 half_move)
-    {
-        for(u8 i = 0; i < REP_MOVES_SIZE - 1; ++i)
-            rep_moves_[i] = rep_moves_[i + 1];
-        stack_base()[1].cap = cap;
-        state_index = 1;
-        undo_move(m);
-        stack_base()->flags = flags;
-        stack_base()->half_move = half_move;
-        if(!m.is_promotion() && m.is_en_passant())
-        {
-            square epsq = square::from_rowcol(m.fr().row(), m.to().col());
-            stack_base()->lastmove.clear_set_to(epsq).set_pawn_dmove();
-        }
-    }
+    void execute_move(move m);
+    void unexecute_move(move m, piece_index cap, u8 flags, u8 half_move);
 
     bool move_is_reversible(move mv) const
     {
         if(mv.is_special()) return false;
-        if(square_to_index(mv.nonflag_fr()).is_pawn_of_color(c_))
+        if(square_to_index(mv.nonflag_fr()).is_pawn_of_color(gd.c_))
             return false;
         return square_to_index(mv.nonflag_to()).is_nothing();
     }
@@ -1096,17 +1239,17 @@ s8 game::see_square(square s)
     piece_index attacker = piece_index::NOTHING;
 
     {
-        piece_color const ec = c_.opposite();
+        piece_color const ec = gd.c_.opposite();
         piece_index i;
         square_delta d = ec.forward();
-        if((i = square_to_index(s + d + square_delta::WEST)).is_pawn_of_color(c_))
+        if((i = square_to_index(s + d + square_delta::WEST)).is_pawn_of_color(gd.c_))
         {
             if(s.row() == ec.promotion_row())
                 v += SEE_PV[piece_type::Q_] - SEE_PV[piece_type::WP_];
             attacker = i;
             goto recurse;
         }
-        if((i = square_to_index(s + d + square_delta::EAST)).is_pawn_of_color(c_))
+        if((i = square_to_index(s + d + square_delta::EAST)).is_pawn_of_color(gd.c_))
         {
             if(s.row() == ec.promotion_row())
                 v += SEE_PV[piece_type::Q_] - SEE_PV[piece_type::WP_];
@@ -1115,7 +1258,7 @@ s8 game::see_square(square s)
         }
     }
 
-    for(piece_index i : knights(c_))
+    for(piece_index i : knights(gd.c_))
     {
         square ts = index_to_square(i);
         if(ts.is_nowhere()) continue;
@@ -1127,7 +1270,7 @@ s8 game::see_square(square s)
     }
 
     // bishops
-    for(piece_index i : sliders(c_))
+    for(piece_index i : sliders(gd.c_))
     {
         square ts = index_to_square(i);
         if(ts.is_nowhere()) continue;
@@ -1146,7 +1289,7 @@ s8 game::see_square(square s)
     }
 
     // rooks
-    for(piece_index i : sliders(c_))
+    for(piece_index i : sliders(gd.c_))
     {
         square ts = index_to_square(i);
         if(ts.is_nowhere()) continue;
@@ -1165,7 +1308,7 @@ s8 game::see_square(square s)
     }
 
     // queens
-    for(piece_index i : sliders(c_))
+    for(piece_index i : sliders(gd.c_))
     {
         square ts = index_to_square(i);
         if(ts.is_nowhere()) continue;
@@ -1239,7 +1382,7 @@ static void sort_moves_descending(s8* scores, move* m, u8 n)
     }
 }
 
-u8 game::order_moves(move* m, u8 n, u8 depth)
+u8 game::order_moves(move* m, u8 n)
 {
     static constexpr u8 const MAX_SORT = 31;
 #if 0
@@ -1289,7 +1432,7 @@ u8 game::order_moves(move* m, u8 n, u8 depth)
     ic = tmin<u8>(ic, ib + MAX_SORT);
     for(u8 i = ib; i < ic; ++i)
     {
-        bool flip = c_.is_black();
+        bool flip = gd.c_.is_black();
         square s = m[i].fr();
         u8 pti = square_to_piece(s).type().x - 2;
         if(pti > 5) pti = 0;
@@ -1317,7 +1460,7 @@ u8 game::reduce_qsearch(move* m, u8 n)
     return n;
 }
 
-score game::qsearch(move* m, score a, score b, u8 depth)
+score game::qsearch(move* m, score a, score b)
 {
 #if CH2K_MAX_MOVE_STACK
     max_move_stack_ = tmax(max_move_stack_, uint16_t(m - &mvs_[0]));
@@ -1334,7 +1477,7 @@ score game::qsearch(move* m, score a, score b, u8 depth)
     if(n == GEN_MOVES_OUT_OF_MEM)
         return eval_relative_with_see();
     if(n == 0)
-        return in_check ? SCORE_LOSS + depth : draw_score();
+        return in_check ? SCORE_LOSS + state_index : draw_score();
     score stand_pat = eval_relative();
     if(stand_pat >= b)
         return b;
@@ -1346,11 +1489,11 @@ score game::qsearch(move* m, score a, score b, u8 depth)
         CH2K_ASSERT(!square_to_index(m[i].fr()).is_nothing());
     }
     n = reduce_qsearch(m, n);
-    u8 bc = order_moves(m, n, depth);
+    u8 bc = order_moves(m, n);
     for(u8 i = 0; i < n; ++i)
     {
         do_move(m[i]);
-        v = tmax<score>(v, -qsearch(m + n, -b, -a, depth + 1));
+        v = tmax<score>(v, -qsearch(m + n, -b, -a));
         undo_move(m[i]);
         a = tmax<score>(a, v);
         if(a >= b) return b;
@@ -1488,7 +1631,7 @@ u8 game::check_status()
     return STATUS_DRAW_STALEMATE;
 }
 
-bool game::endgame_side(piece_color c, score& s, u8 depth)
+bool game::endgame_side(piece_color c, score& s)
 {
     u8 const pa = pval(c);
     u8 const pb = pval(c.opposite());
@@ -1560,14 +1703,14 @@ bool game::endgame_side(piece_color c, score& s, u8 depth)
     return false;
 }
 
-bool game::endgame(score& s, u8 depth)
+bool game::endgame(score& s)
 {
-    if(endgame_side(c_, s, depth)) return true;
-    if(endgame_side(c_.opposite(), s, depth)) return (s = -s), true;
+    if(endgame_side(gd.c_, s)) return true;
+    if(endgame_side(gd.c_.opposite(), s)) return (s = -s), true;
     return false;
 }
 
-score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
+score game::negamax(move* m, score a, score b, u8 max_depth)
 {
 #if CH2K_MAX_MOVE_STACK
     max_move_stack_ = tmax(max_move_stack_, uint16_t(m - &mvs_[0]));
@@ -1576,14 +1719,14 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
     if(check_draw_material()) return draw_score();
     if(check_draw_repetition() >= 2) return draw_score();
     if(stop_ || nodes_ > max_nodes_) return 0;
-    if(depth >= max_depth)
+    if(state_index >= max_depth)
     {
         // qsearch has the danger of exceeding low node limits
         // at depth 1 for noisy positions
         //if(depth == 1)
         //    return eval_relative_with_see();
         //else
-            return qsearch(m, a, b, depth);
+            return qsearch(m, a, b);
         //return eval_relative_with_see();
     }
     u8 n = gen_moves(m);
@@ -1591,7 +1734,7 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
     if(n == GEN_MOVES_OUT_OF_MEM) max_move_stack_ = MOVEGEN_STACK_SIZE;
 #endif
     if(n == GEN_MOVES_OUT_OF_MEM) return eval_relative_with_see();
-    if(n == 0) return in_check ? SCORE_LOSS + depth : draw_score();
+    if(n == 0) return in_check ? SCORE_LOSS + state_index : draw_score();
     score v = SCORE_LOSS;
 
     // some weird pruning
@@ -1602,7 +1745,7 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
     //        return a;
     //}
 
-    u8 badcaps = order_moves(m, n, depth);
+    u8 badcaps = order_moves(m, n);
     //if(in_check) ++max_depth;
     for(u8 i = 0; i < n; ++i)
     {
@@ -1610,7 +1753,7 @@ score game::negamax(move* m, score a, score b, u8 depth, u8 max_depth)
         //u8 md = i > 12 ? max_depth - 1 : max_depth;
         u8 md = max_depth;
         //if(i >= badcaps) --md;
-        v = tmax<score>(v, -negamax(m + n, -b, -a, depth + 1, md));
+        v = tmax<score>(v, -negamax(m + n, -b, -a, md));
         undo_move(m[i]);
         a = tmax<score>(a, v);
         if(a >= b)
@@ -1627,11 +1770,11 @@ score game::negamax_root(score a, score b)
         return in_check ? SCORE_LOSS : draw_score();
     score v;
     v = SCORE_LOSS;
-    order_moves(&mvs_[0], n, 0);
+    order_moves(&mvs_[0], n);
     for(u8 i = 0; i < n; ++i)
     {
         do_move(mvs_[i]);
-        v = tmax<score>(v, -negamax(&mvs_[n], -b, -a, 1, max_depth_));
+        v = tmax<score>(v, -negamax(&mvs_[n], -b, -a, max_depth_));
         undo_move(mvs_[i]);
         if(v > a)
         {
@@ -1684,6 +1827,104 @@ score game::aspiration_window(u8 depth, score prev_score)
     }
 
     return 0;
+}
+
+// starting at a child node, advance i to where the child's
+// next sibling node would start, even if there is not a next sibling
+// returns false if node i was already the final sibling
+static bool book_advance_to_next_sibling(u16& i)
+{
+    u8 d = pgm_read_byte(&OPENING_BOOK[i - 1]);
+    ++i; // advance past this node or to first child
+    if(d & 0x80) // if this node has children
+        while(book_advance_to_next_sibling(i))
+            ; // advance past all children
+    return (d & 0x40) == 0; // check if we had been at the final sibling
+}
+
+// counts the number of siblings starting at i, including i itself
+static u8 book_num_siblings(u16 i)
+{
+    u8 n = 1;
+    while(book_advance_to_next_sibling(i))
+        ++n;
+    return n;
+}
+
+// careful: does not check if there are at least n more siblings
+static void book_advance_n_siblings(u16& i, u8 n)
+{
+    while(n-- > 0)
+        book_advance_to_next_sibling(i);
+}
+
+void game::execute_move(move m)
+{
+    ++gd.ply_;
+    // advance opening book index
+    if(gd.opening_index_ > 0)
+    {
+        u8 n = gen_moves(&mvs_[0]);
+        while(mvs_[--n] != m)
+            ; // assumes we are not erroneously in the opening book
+        // now n is the index of m
+        for(;;)
+        {
+            u8 d = pgm_read_byte(&OPENING_BOOK[gd.opening_index_ - 1]);
+            if((d & 0x3f) == n)
+            {
+                gd.opening_index_ = (d & 0x80) ? gd.opening_index_ + 1 : 0;
+                break;
+            }
+            if(!book_advance_to_next_sibling(gd.opening_index_))
+            {
+                gd.opening_index_ = 0;
+                break;
+            }
+        }
+    }
+
+    for(u8 i = REP_MOVES_SIZE - 1; i > 0; --i)
+        gd.rep_moves_[i] = gd.rep_moves_[i - 1];
+    gd.rep_moves_[0] = m;
+    do_move(m);
+    stack_reset();
+}
+
+void game::unexecute_move(move m, piece_index cap, u8 flags, u8 half_move)
+{
+    --gd.ply_;
+    for(u8 i = 0; i < REP_MOVES_SIZE - 1; ++i)
+        gd.rep_moves_[i] = gd.rep_moves_[i + 1];
+    stack_base()[1].cap = cap;
+    state_index = 1;
+    undo_move(m);
+    stack_base()->flags = flags;
+    stack_base()->half_move = half_move;
+    if(!m.is_promotion() && m.is_en_passant())
+    {
+        square epsq = square::from_rowcol(m.fr().row(), m.to().col());
+        stack_base()->lastmove.clear_set_to(epsq).set_pawn_dmove();
+    }
+}
+
+void game::find_opening_move()
+{
+    u8 n = book_num_siblings(gd.opening_index_);
+    n = nrand(n);
+    book_advance_n_siblings(gd.opening_index_, n);
+    n = pgm_read_byte(&OPENING_BOOK[gd.opening_index_ - 1]);
+    n &= 0x3f;
+    gen_moves(&mvs_[0]);
+    best_ = mvs_[n];
+}
+
+void game::ai_move()
+{
+    if(gd.opening_index_ != 0)
+        find_opening_move();
+    else
+        iterative_deepening();
 }
 
 void game::iterative_deepening()
@@ -1938,14 +2179,14 @@ score game::eval_side(bool is_white)
 void game::do_null_move()
 {
     auto& st = stack_push();
-    square k = index_to_square(king(c_));
+    square k = index_to_square(king(gd.c_));
     st.lastmove.clear_set_fr(k).clear_set_to(k);
-    c_ = c_.opposite();
+    gd.c_ = gd.c_.opposite();
 }
 
 void game::undo_null_move()
 {
-    c_ = c_.opposite();
+    gd.c_ = gd.c_.opposite();
     stack_pop();
 }
 
@@ -1964,7 +2205,7 @@ void game::do_move(move m)
     CH2K_ASSERT(!pc.is_nothing());
 
     if(!cap.is_nothing())
-        pval(c_.opposite()) -= pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
+        pval(gd.c_.opposite()) -= pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
 
     st.cap = cap;
     st.flags &= pgm_read_byte(&CASTLING_SPOILERS[x.x]);
@@ -1979,16 +2220,16 @@ void game::do_move(move m)
             index_to_square(pc) = square::NOWHERE;
             if(t != piece_type::KNIGHT)
             {
-                pc = (set_first_slider(c_) -= 1);
-                index_to_piece(pc) = piece::from_type_color(t, c_);
+                pc = (set_first_slider(gd.c_) -= 1);
+                index_to_piece(pc) = piece::from_type_color(t, gd.c_);
             }
             else
             {
-                pc = last_knight(c_);
-                set_last_knight(c_) += 1;
-                index_to_piece(pc) = piece::from_type_color(piece_type::KNIGHT, c_);
+                pc = last_knight(gd.c_);
+                set_last_knight(gd.c_) += 1;
+                index_to_piece(pc) = piece::from_type_color(piece_type::KNIGHT, gd.c_);
             }
-            pval(c_) += pgm_read_byte(&PVALS[t.x]) - PVALS[1];
+            pval(gd.c_) += pgm_read_byte(&PVALS[t.x]) - PVALS[1];
         }
         else if(m.is_castle())
         {
@@ -2010,11 +2251,11 @@ void game::do_move(move m)
         else if(m.is_en_passant())
         {
             // remove captured pawn
-            square epcap = y - c_.forward();
+            square epcap = y - gd.c_.forward();
             piece_index eppc = st.cap = square_to_index(epcap);
             square_to_index(epcap) = piece_index::NOTHING;
             index_to_square(eppc) = square::NOWHERE;
-            pval(c_.opposite()) -= PVALS[1];
+            pval(gd.c_.opposite()) -= PVALS[1];
         }
     }
 
@@ -2023,12 +2264,12 @@ void game::do_move(move m)
     index_to_square(pc) = y;
     index_to_square(cap) = square::NOWHERE;
 
-    c_ = c_.opposite();
+    gd.c_ = gd.c_.opposite();
 }
 
 void game::undo_move(move m)
 {
-    c_ = c_.opposite();
+    gd.c_ = gd.c_.opposite();
 
     square x = m.fr();
     square y = m.to();
@@ -2039,18 +2280,18 @@ void game::undo_move(move m)
     {
         if(m.is_promotion())
         {
-            pval(c_) -= pgm_read_byte(&PVALS[index_to_piece(pc).type().x]) - PVALS[1];
+            pval(gd.c_) -= pgm_read_byte(&PVALS[index_to_piece(pc).type().x]) - PVALS[1];
             index_to_piece(pc) = piece::NOTHING;
             index_to_square(pc) = square::NOWHERE;
-            if(pc < last_knight(c_))
-                set_last_knight(c_) -= 1;
+            if(pc < last_knight(gd.c_))
+                set_last_knight(gd.c_) -= 1;
             else
-                set_first_slider(c_) += 1;
-            for(auto i : pawns(c_))
+                set_first_slider(gd.c_) += 1;
+            for(auto i : pawns(gd.c_))
                 if(index_to_piece(i).is_nothing())
                 {
                     pc = i;
-                    index_to_piece(i) = piece::pawn(c_);
+                    index_to_piece(i) = piece::pawn(gd.c_);
                     break;
                 }
         }
@@ -2073,16 +2314,16 @@ void game::undo_move(move m)
         else if(m.is_en_passant())
         {
             // restore captured pawn
-            square epcap = y - c_.forward();
+            square epcap = y - gd.c_.forward();
             square_to_index(epcap) = cap;
             index_to_square(cap) = epcap;
-            pval(c_.opposite()) += PVALS[1];
+            pval(gd.c_.opposite()) += PVALS[1];
             cap = piece_index::NOTHING;
         }
     }
 
     if(!cap.is_nothing())
-        pval(c_.opposite()) += pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
+        pval(gd.c_.opposite()) += pgm_read_byte(&PVALS[index_to_piece(cap).type().x]);
 
     square_to_index(x) = pc;
     index_to_square(pc) = x;
@@ -2129,7 +2370,7 @@ void game::clear()
     s.lastmove = move::NO_MOVE;
     s.cap = piece_index::NOTHING;
 
-    c_ = piece_color::W;
+    gd.c_ = piece_color::W;
     pval(piece_color::W) = 0;
     pval(piece_color::B) = 0;
 }
@@ -2137,6 +2378,8 @@ void game::clear()
 void game::new_game()
 {
     clear();
+
+    gd.opening_index_ = 1;
 
     // add pawns
     {
@@ -2189,16 +2432,16 @@ GAME DATA FORMAT
  32 - board data (4 bits per piece type/color)
   2 - last move (contains en passant info)
   1 - half move clock
-??? - repetition history
-  1 - side to move
+??? - repetition history   \
+  1 - side to move         | grouped
+  2 - opening book index   |  data
+  2 - ply                  /
 ??? - total
 */
-static constexpr int const EEPROM_GAME_DATA_SIZE = 36 + int(game::REP_MOVES_SIZE) * 2;
+static constexpr int const EEPROM_GAME_DATA_SIZE = 35 + sizeof(game::gd);
 
 void game::save_game_data(u8* x)
 {
-    state const& s = stack();
-
     // board data
     for(u8 r = 0; r < 8; ++r)
     {
@@ -2219,21 +2462,15 @@ void game::save_game_data(u8* x)
     }
 
     // last move
-    CH2K_EEPROM_WR(x++, s.lastmove.a);
-    CH2K_EEPROM_WR(x++, s.lastmove.b);
+    CH2K_EEPROM_WR(x++, stack_base()->lastmove.a);
+    CH2K_EEPROM_WR(x++, stack_base()->lastmove.b);
 
     // half move clock
-    CH2K_EEPROM_WR(x++, s.half_move);
+    CH2K_EEPROM_WR(x++, stack_base()->half_move);
 
-    // repetition history
-    for(u8 n = 0; n < REP_MOVES_SIZE; ++n)
-    {
-        CH2K_EEPROM_WR(x++, rep_moves_[n].a);
-        CH2K_EEPROM_WR(x++, rep_moves_[n].b);
-    }
-
-    // side to move
-    CH2K_EEPROM_WR(x, c_.x);
+    // grouped data
+    for(u8 i = 0; i < sizeof(gd); ++i)
+        CH2K_EEPROM_WR(x++, *((u8*)&gd + i));
 }
 
 piece_index game::add_piece(piece p, square s)
@@ -2263,7 +2500,6 @@ piece_index game::add_piece(piece p, square s)
 void game::load_game_data(u8 const* x)
 {
     clear();
-    state& s = stack();
 
     // board data
     for(u8 r = 0; r < 8; ++r)
@@ -2279,21 +2515,15 @@ void game::load_game_data(u8 const* x)
     }
 
     // last move
-    s.lastmove.a = CH2K_EEPROM_RD(x++);
-    s.lastmove.b = CH2K_EEPROM_RD(x++);
+    stack_base()->lastmove.a = CH2K_EEPROM_RD(x++);
+    stack_base()->lastmove.b = CH2K_EEPROM_RD(x++);
 
     // half move clock
-    s.half_move = CH2K_EEPROM_RD(x++);
+    stack_base()->half_move = CH2K_EEPROM_RD(x++);
 
-    // repetition history
-    for(u8 n = 0; n < REP_MOVES_SIZE; ++n)
-    {
-        rep_moves_[n].a = CH2K_EEPROM_RD(x++);
-        rep_moves_[n].b = CH2K_EEPROM_RD(x++);
-    }
-
-    // side to move
-    c_ = piece_color{ CH2K_EEPROM_RD(x) };
+    // grouped data
+    for(u8 i = 0; i < sizeof(gd); ++i)
+        *((u8*)&gd + i) = CH2K_EEPROM_RD(x++);
 }
 
 void game::load_fen(char const* fen)
@@ -2338,13 +2568,13 @@ void game::load_fen(char const* fen)
     }
 
     // side to move
-    c_ = piece_color::W;
+    gd.c_ = piece_color::W;
     while(' ' != (c = *fen++) && c)
     {
         switch(c)
         {
-        case 'w': case 'W': c_ = piece_color::W; break;
-        case 'b': case 'B': c_ = piece_color::B; break;
+        case 'w': case 'W': gd.c_ = piece_color::W; break;
+        case 'b': case 'B': gd.c_ = piece_color::B; break;
         default: break;
         }
     }
@@ -2366,18 +2596,18 @@ void game::load_fen(char const* fen)
     }
 
     // by default set last move to king
-    stack().lastmove = move{}.clear_set_to(index_to_square(king(c_.opposite())));
+    stack().lastmove = move{}.clear_set_to(index_to_square(king(gd.c_.opposite())));
 
     // find if king is in contact check, set last move to be checker
     {
-        x = index_to_square(king(c_));
+        x = index_to_square(king(gd.c_));
         for(u8 j = 0; j < 8; ++j)
         {
             square_delta d{ pgm_read_byte(&square_delta::KING_MOVES[j]) };
             square y = x - d;
             piece_index i = square_to_index(y);
             if(i.is_nothing()) continue;
-            if(i.is_of_color(c_)) continue;
+            if(i.is_of_color(gd.c_)) continue;
             if(index_to_piece(i).type().can_cap_delta_contact(d))
                 stack().lastmove.clear_set_to(y);
         }
@@ -2387,7 +2617,7 @@ void game::load_fen(char const* fen)
             square y = x - d;
             piece_index i = square_to_index(y);
             if(i.is_nothing()) continue;
-            if(i.is_of_color(c_)) continue;
+            if(i.is_of_color(gd.c_)) continue;
             if(index_to_piece(i).type() == piece_type::KNIGHT)
                 stack().lastmove.clear_set_to(y);
         }
@@ -2400,7 +2630,7 @@ void game::load_fen(char const* fen)
         {
             x = square::from_rowcol(u8('8' - *fen), u8(c - 'a'));
             stack().lastmove =
-                move{}.clear_set_to(x - c_.forward()).set_pawn_dmove();
+                move{}.clear_set_to(x - gd.c_.forward()).set_pawn_dmove();
             break;
         }
     }
@@ -2422,7 +2652,7 @@ bool game::en_passant_pinned(square king, square sa, square sb)
         x = sb;
         while((i = square_to_index(x += square_delta::EAST)).is_nothing())
             ;
-        return i.is_not_of_color(c_) && index_to_piece(i).type().can_cap_orthogonal();
+        return i.is_not_of_color(gd.c_) && index_to_piece(i).type().can_cap_orthogonal();
     }
     else
     {
@@ -2432,7 +2662,7 @@ bool game::en_passant_pinned(square king, square sa, square sb)
         x = sa;
         while((i = square_to_index(x += square_delta::WEST)).is_nothing())
             ;
-        return i.is_not_of_color(c_) && index_to_piece(i).type().can_cap_orthogonal();
+        return i.is_not_of_color(gd.c_) && index_to_piece(i).type().can_cap_orthogonal();
     }
 }
 
@@ -2460,7 +2690,7 @@ u8 game::gen_moves(move* m)
     move* const m8 = &mvs_[MOVEGEN_STACK_SIZE - 8];
     move* const m_out_of_mem = m + MOVEGEN_STACK_SIZE;
 
-    auto const my_color = c_;
+    auto const my_color = gd.c_;
     auto const enemy_color = my_color.opposite();
     auto const forward = my_color.forward();
 
@@ -2887,7 +3117,7 @@ stack_str<128> game::str() const
 {
     stack_str<128> rs;
     size_t j = 0;
-    rs.copy(j, c_.is_white() ? "WHITE" : "BLACK");
+    rs.copy(j, gd.c_.is_white() ? "WHITE" : "BLACK");
     rs.copy(j, " to move\n");
     for(u8 r = 0; r < 8; ++r)
     {

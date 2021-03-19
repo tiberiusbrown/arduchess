@@ -85,20 +85,9 @@ static void save_game(uint8_t n)
     }
     int a = get_save_addr(n);
     g.save_game_data((uint8_t*)(a + offsetof(save_file_data, data)));
-    for(uint8_t i = 0; i < 2; ++i)
-    {
-        eeprom_update(a + offsetof(save_file_data, aihappy) + i, aihappy[i]);
-        eeprom_update(a + offsetof(save_file_data, ailevel) + i, ailevel[i]);
-        eeprom_update(a + offsetof(save_file_data, aicontempt) + i, aicontempt[i]);
-    }
-    for(uint8_t i = 0; i < sizeof(undohist); ++i)
-        eeprom_update(a + offsetof(save_file_data, undohist) + i, *((uint8_t*)undohist + i));
-    for(uint8_t i = 0; i < SANHIST_SIZE; ++i)
-        eeprom_update(a + offsetof(save_file_data, sanhist) + i, sanhist[i]);
-    eeprom_update(a + offsetof(save_file_data, undohist_num), undohist_num);
-    eeprom_update(a + offsetof(save_file_data, ply) + 0, *((uint8_t*)&ply + 0));
-    eeprom_update(a + offsetof(save_file_data, ply) + 1, *((uint8_t*)&ply + 1));
     eeprom_update(a + offsetof(save_file_data, valid), SAVE_VALID_TAG);
+    for(uint8_t i = 0; i < sizeof(save_file_grouped_data); ++i)
+        eeprom_update(a + offsetof(save_file_data, grouped_data) + i, *((uint8_t*)&dd + i));
     set_save_checksum(compute_save_checksum());
     checksum_valid = true;
     game_saved = true;
@@ -108,19 +97,8 @@ static void load_game(uint8_t n)
 {
     int a = get_save_addr(n);
     g.load_game_data((uint8_t*)(a + offsetof(save_file_data, data)));
-    for(uint8_t i = 0; i < 2; ++i)
-    {
-        aihappy[i] = EEPROM.read(a + offsetof(save_file_data, aihappy) + i);
-        ailevel[i] = EEPROM.read(a + offsetof(save_file_data, ailevel) + i);
-        aicontempt[i] = EEPROM.read(a + offsetof(save_file_data, aicontempt) + i);
-    }
-    for(uint8_t i = 0; i < sizeof(undohist); ++i)
-        *((uint8_t*)undohist + i) = EEPROM.read(a + offsetof(save_file_data, undohist) + i);
-    for(uint8_t i = 0; i < SANHIST_SIZE; ++i)
-        sanhist[i] = EEPROM.read(a + offsetof(save_file_data, sanhist) + i);
-    undohist_num = EEPROM.read(a + offsetof(save_file_data, undohist_num));
-    *((uint8_t*)&ply + 0) = EEPROM.read(a + offsetof(save_file_data, ply) + 0);
-    *((uint8_t*)&ply + 1) = EEPROM.read(a + offsetof(save_file_data, ply) + 1);
+    for(uint8_t i = 0; i < sizeof(save_file_grouped_data); ++i)
+        *((uint8_t*)&dd + i) = EEPROM.read(a + offsetof(save_file_data, grouped_data) + i);
 }
 
 static void update_board_cache_from_save(uint8_t n)

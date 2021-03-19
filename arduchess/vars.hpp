@@ -1,11 +1,22 @@
 #pragma once
 
+#include "stdint.h"
+#include <Arduboy2.h>
+
 #define CH2K_ARDUINO
+static uint16_t rand_state0, rand_state1;
+static uint8_t u8rand()
+{
+	const uint16_t temp = (rand_state0 ^ (rand_state0 << 5));
+	rand_state0 = rand_state1; 
+	rand_state1 = (rand_state1 ^ (rand_state1 >> 1)) ^ (temp ^ (temp >> 3));
+	return (uint8_t)rand_state1;
+}
+#define CH2K_RAND u8rand
 #include "ch2k/ch2k.hpp"
 
 // algebraic notation move history
 static constexpr uint8_t const MOVEHIST_SIZE = 6;
-static uint16_t ply;
 
 static constexpr uint8_t const UNDOHIST_SIZE = ch2k::game::REP_MOVES_EXTRA;
 struct undohist_data
@@ -14,8 +25,6 @@ struct undohist_data
     uint8_t flags;
     uint8_t half_move;
 };
-static undohist_data undohist[UNDOHIST_SIZE];
-static uint8_t undohist_num;
 
 enum
 {
@@ -26,23 +35,39 @@ enum
     SANFLAG_MATE  = (1 << 7),
 };
 static constexpr uint8_t const SANHIST_SIZE = UNDOHIST_SIZE + MOVEHIST_SIZE * 2;
-uint8_t sanhist[SANHIST_SIZE]; // bits 0-2 are piece type char
 
 static constexpr uint8_t const NUM_SAVE_FILES = 3;
 
 #define SAVE_VALID_TAG 0xC5
-struct save_file_data
+
+struct save_file_grouped_data
 {
-  uint8_t valid;
-  uint8_t data[ch2k::EEPROM_GAME_DATA_SIZE];
   uint8_t aihappy[2];
   uint8_t ailevel[2];
   uint8_t aicontempt[2];
   undohist_data undohist[UNDOHIST_SIZE];
   uint8_t sanhist[SANHIST_SIZE];
   uint8_t undohist_num;
-  uint16_t ply;
+} dd;
+
+struct save_file_data
+{
+  uint8_t valid;
+  save_file_grouped_data grouped_data;
+  uint8_t data[ch2k::EEPROM_GAME_DATA_SIZE];
 };
+
+static constexpr auto& aihappy      = dd.aihappy;
+static constexpr auto& ailevel      = dd.ailevel;
+static constexpr auto& aicontempt   = dd.aicontempt;
+static constexpr auto& undohist     = dd.undohist;
+static constexpr auto& sanhist      = dd.sanhist;
+static constexpr auto& undohist_num = dd.undohist_num;
+
+//static undohist_data undohist[UNDOHIST_SIZE];
+//static uint8_t undohist_num;
+
+//uint8_t sanhist[SANHIST_SIZE]; // bits 0-2 are piece type char
 
 // whether the game was just saved (cleared on each move)
 static bool game_saved;
@@ -104,14 +129,9 @@ static uint8_t nframe;
 static ch2k::piece b[8][8];
 // whether board is rotated
 static bool rotated;
-// whose turn is it?
-static ch2k::piece_color turn;
+// whose turn is it? 0 == white, 1 == black
+static uint8_t turn;
 static uint8_t game_status;
-
-// ai data
-static uint8_t aihappy[2];
-static uint8_t ailevel[2]; // 0: human, 1-3: ai level
-static uint8_t aicontempt[2];
 
 // cursor position
 uint8_t cx, cy;
