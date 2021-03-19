@@ -21,7 +21,7 @@ static constexpr uint8_t const MOVEHIST_SIZE = 6;
 static constexpr uint8_t const UNDOHIST_SIZE = ch2k::game::REP_MOVES_EXTRA;
 struct undohist_data
 {
-    uint8_t cap;
+    uint8_t cap; // piece, not index
     uint8_t flags;
     uint8_t half_move;
 };

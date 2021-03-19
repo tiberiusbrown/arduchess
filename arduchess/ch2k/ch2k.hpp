@@ -99,6 +99,7 @@ static u8 nrand(u8 n)
 // bit 7 indicates the move has children (immediately following)
 // bit 6 indicates the last child move of its parent move
 // tree is serialized depth-first (children immediately follow parents)
+static constexpr u8 const OPENING_BOOK_MAX_DEPTH = 6;
 static u8 const OPENING_BOOK[1022] PROGMEM =
 {
     145,   5, 199, 133,  81,  71, 146,  17,
@@ -1060,6 +1061,7 @@ struct game
 
     void save_game_data(u8* x);
     void load_game_data(u8 const* x);
+    bool load_game_data_opening(u16 index, u8* mvs, u8 depth);
     piece_index add_piece(piece p, square s);
     void load_fen(char const* fen);
     void new_game();
@@ -1171,6 +1173,7 @@ struct game
 
     void execute_move(move m);
     void unexecute_move(move m, piece_index cap, u8 flags, u8 half_move);
+    void reset_opening_index();
 
     bool move_is_reversible(move mv) const
     {
@@ -1906,6 +1909,19 @@ void game::unexecute_move(move m, piece_index cap, u8 flags, u8 half_move)
         square epsq = square::from_rowcol(m.fr().row(), m.to().col());
         stack_base()->lastmove.clear_set_to(epsq).set_pawn_dmove();
     }
+    reset_opening_index();
+}
+
+void game::reset_opening_index()
+{
+    gd.opening_index_ = 0;
+    if(gd.ply_ <= OPENING_BOOK_MAX_DEPTH)
+    {
+        u8 ply = (u8)gd.ply_;
+        new_game();
+        for(u8 i = 0; i < ply; ++i)
+            execute_move(gd.rep_moves_[ply - 1]);
+    }
 }
 
 void game::find_opening_move()
@@ -2380,6 +2396,7 @@ void game::new_game()
     clear();
 
     gd.opening_index_ = 1;
+    gd.ply_ = 0;
 
     // add pawns
     {
@@ -2497,6 +2514,24 @@ piece_index game::add_piece(piece p, square s)
     return piece_index::NOTHING;
 }
 
+bool game::load_game_data_opening(u16 index, u8* mvs, u8 depth)
+{
+    if(depth == 0)
+        return index == gd.opening_index_;
+    for(;;)
+    {
+        u8 d = pgm_read_byte(&OPENING_BOOK[index - 1]);
+        if((d & 0x80) && load_game_data_opening(index + 1, mvs, depth - 1))
+        {
+            mvs[depth] = d;
+            return true;
+        }
+        if(!book_advance_to_next_sibling(index))
+            break;
+    }
+    return false;
+}
+
 void game::load_game_data(u8 const* x)
 {
     clear();
@@ -2524,6 +2559,9 @@ void game::load_game_data(u8 const* x)
     // grouped data
     for(u8 i = 0; i < sizeof(gd); ++i)
         *((u8*)&gd + i) = CH2K_EEPROM_RD(x++);
+
+    // re-establish opening book index by executing moves over again
+    reset_opening_index();
 }
 
 void game::load_fen(char const* fen)
