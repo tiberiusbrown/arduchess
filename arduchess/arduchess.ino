@@ -20,12 +20,17 @@ static void update_board_cache()
         }
 }
 
+static void update_game_info()
+{
+    turn = g.gd.c_.binary_index();
+    game_status = g.check_status();
+}
+
 static void update_game_state()
 {
     static uint8_t const CONTEMPT_VALS[NUM_MSGS_CONTEMPT] PROGMEM =
     { 0, 16, 64 };
-    turn = g.gd.c_.binary_index();
-    game_status = g.check_status();
+    update_game_info();
     if(game_status > ch2k::game::STATUS_CHECK)
         state = STATE_GAME_OVER;
     else if(ailevel[turn] != 0)
@@ -459,6 +464,7 @@ void loop() {
             if(state == STATE_ANIM_UNDO2)
                 undo_single_ply();
             update_board_cache();
+            update_game_info();
             state = STATE_GAME_PAUSED_START;
         }
         break;
