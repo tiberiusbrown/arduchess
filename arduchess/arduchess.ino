@@ -304,6 +304,8 @@ void loop() {
       for(;;);
     }
     
+    tnow = (uint16_t)millis();
+    
     poll_buttons();
     
     switch(state)
@@ -579,8 +581,8 @@ void loop() {
     default: break;
     }
     
-    // save battery yay
-    Arduboy2Core::idle();
+    while((uint16_t)millis() - tnow < LOOP_TIME_MS)
+        Arduboy2Core::idle();
 }
 
 ISR(TIMER3_COMPA_vect)

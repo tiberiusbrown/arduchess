@@ -139,9 +139,13 @@ uint8_t cx, cy;
 // cursor rendered position
 uint8_t rcx, rcy;
 
-static constexpr uint8_t DEBOUNCE_NUM = 20;
-static constexpr uint8_t REP_INIT_NUM = 250;
-static constexpr uint8_t REP_NUM = 150;
+// logic loop time
+uint16_t tnow;
+static constexpr uint8_t LOOP_TIME_MS = 4;
+
+static constexpr uint8_t DEBOUNCE_NUM = 3;
+static constexpr uint8_t REP_INIT_NUM = 80;
+static constexpr uint8_t REP_NUM = 40;
 static uint8_t button_debounce[8];
 static uint8_t button_rep[8];
 static uint8_t buttons, buttons_prev;
