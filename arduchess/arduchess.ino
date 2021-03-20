@@ -78,6 +78,7 @@ static void poll_buttons_debounce(uint8_t debounce_num)
             {
                 button_debounce[n] = 0;
                 chg |= m;
+                button_rep[n] = REP_INIT_NUM;
             }
         }
         else
@@ -86,6 +87,17 @@ static void poll_buttons_debounce(uint8_t debounce_num)
     
     buttons_prev = buttons;
     buttons ^= chg;
+    
+    static constexpr uint8_t const DIR_BUTTONS =
+        UP_BUTTON | DOWN_BUTTON | LEFT_BUTTON | RIGHT_BUTTON;
+    for(uint8_t n = 0, m = 1; m != 0; m <<= 1, ++n)
+    {
+        if((buttons & m) && --button_rep[n] == 0)
+        {
+            button_rep[n] = REP_NUM;
+            buttons_prev &= (~m | (~DIR_BUTTONS));
+        }
+    }
 }
 
 static void poll_buttons()
@@ -95,7 +107,7 @@ static void poll_buttons()
 
 static void poll_buttons_during_rendering()
 {
-    poll_buttons_debounce(0);   
+    poll_buttons_debounce(0);
 }
 
 static uint8_t just_pressed(uint8_t b)
@@ -115,8 +127,7 @@ static void setup_for_game()
 
 void setup() {
     Arduboy2Base::boot();
-    poll_buttons();
-    if(buttons & UP_BUTTON)
+    if(Arduboy2Core::buttonsState() & UP_BUTTON)
     {
         Arduboy2Core::sendLCDCommand(OLED_ALL_PIXELS_ON);
         Arduboy2Core::digitalWriteRGB(RGB_ON, RGB_ON, RGB_ON);
@@ -126,7 +137,6 @@ void setup() {
   
     init_saves();
 
-    nframe = 0;
     state = STATE_TITLE_START;
 
     TCCR3A = 0;

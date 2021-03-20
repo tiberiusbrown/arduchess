@@ -140,5 +140,8 @@ uint8_t cx, cy;
 uint8_t rcx, rcy;
 
 static constexpr uint8_t DEBOUNCE_NUM = 20;
+static constexpr uint8_t REP_INIT_NUM = 250;
+static constexpr uint8_t REP_NUM = 150;
 static uint8_t button_debounce[8];
+static uint8_t button_rep[8];
 static uint8_t buttons, buttons_prev;
