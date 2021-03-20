@@ -136,6 +136,9 @@ static uint8_t game_status;
 // cursor position
 uint8_t cx, cy;
 
+// cursor rendered position
+uint8_t rcx, rcy;
+
 static constexpr uint8_t DEBOUNCE_NUM = 20;
 static uint8_t button_debounce[8];
 static uint8_t buttons, buttons_prev;

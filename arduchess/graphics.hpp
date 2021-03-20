@@ -139,40 +139,38 @@ static void render_anim()
   x = pgm_read_byte(&SMOOTHERSTEP[x]);
   y = uint8_t((uint16_t(x) * (by - ay) + 32) >> 6) + ay;
   x = uint8_t((uint16_t(x) * (bx - ax) + 32) >> 6) + ax;
-  //ch2k::piece p = g.square_to_piece(ch2k::square{tb});
-  //if(g.stack().lastmove.is_promotion())
-  //  p = g.gd.c_.is_white() ? ch2k::piece::BP : ch2k::piece::WP;
   draw_piece_unaligned(
     get_piece_img(ch2k::piece{ tc }),
     buf, y, x);
 }
 
+static uint8_t const CURSOR_P[32] PROGMEM =
+{
+    0-1, 0-1, 0-1, 0-1, 0-1, 0-1, 0-1, 0-1,
+    0-1, 1-1, 2-1, 3-1, 4-1, 5-1, 6-1, 7-1,
+    8-1, 8-1, 8-1, 8-1, 8-1, 8-1, 8-1, 8-1,
+    8-1, 7-1, 6-1, 5-1, 4-1, 3-1, 2-1, 1-1,
+};
+
+static void render_cursor_ex(uint8_t y, uint8_t x, bool solid)
+{
+    for(uint8_t i = 0; i < 32; ++i)
+    {
+        uint8_t yp = y + pgm_read_byte(&CURSOR_P[i]);
+        uint8_t xp = x + pgm_read_byte(&CURSOR_P[(i + 8) & 0x1f]);
+        if(yp < 63 && xp < 63 && (solid || ((i + nframe/2) & 4)))
+            draw_pixel(yp, xp);
+    }
+}
+
 static void render_cursor(uint8_t y, uint8_t x)
 {
-  // draw cursor
-  int16_t n = ((int16_t)y << 3) + x;
-  if(y >= 8)
-  {
-    if(x >= 8)
-      buf[n-64-1] |= 0x80;
-    for(uint8_t i = 0; i < 7; ++i)
-      buf[n-64+i] |= 0x80;
-    if(cx < 56)
-      buf[n-64+7] |= 0x80;
-  }
-  if(x >= 8)
-    buf[n-1] |= 0x7f;
-  if(x < 56)
-    buf[n+7] |= 0x7f;
-  if(y < 56)
-  {
-    if(x >= 8)
-      buf[n-1] |= 0x80;
-    for(uint8_t i = 0; i < 7; ++i)
-      buf[n+i] |= 0x80;
-    if(x < 56)
-      buf[n+7] |= 0x80;
-  }
+    render_cursor_ex(y, x, false);
+}
+
+static void render_solid_cursor(uint8_t y, uint8_t x)
+{
+    render_cursor_ex(y, x, true);
 }
 
 static void render_title_text()

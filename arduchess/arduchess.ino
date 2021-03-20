@@ -105,8 +105,8 @@ static uint8_t just_pressed(uint8_t b)
 
 static void setup_for_game()
 {
-    cx = 4 * 8;
-    cy = 6 * 8;
+    cx = rcx = 4 * 8;
+    cy = rcy = 6 * 8;
     aihappy[0] = aihappy[1] = 2;
     undohist_num = 0;
     rotated = false;
@@ -374,10 +374,8 @@ void loop() {
             state = STATE_TITLE_START;
         break;
     case STATE_HUMAN_PROMOTION:
-        if(just_pressed(LEFT_BUTTON))
-            nframe = 0, --tc;
-        if(just_pressed(RIGHT_BUTTON))
-            nframe = 0, ++tc;
+        if(just_pressed(LEFT_BUTTON )) --tc;
+        if(just_pressed(RIGHT_BUTTON)) ++tc;
         tc &= 3;
         if(just_pressed(A_BUTTON))
         {
@@ -387,6 +385,8 @@ void loop() {
             mv.clear_set_to(ch2k::square{tb});
             mv.set_promotion();
             mv.set_promotion_piece_type(ch2k::piece_type{tc});
+            rcx = cx;
+            rcy = cy;
             send_move(mv);
         }
         else if(just_pressed(B_BUTTON))
@@ -401,14 +401,10 @@ void loop() {
             state = STATE_GAME_PAUSED_START;
             break;
         }
-        if(just_pressed(UP_BUTTON))
-            nframe = 0, cy -= 8;
-        if(just_pressed(DOWN_BUTTON))
-            nframe = 0, cy += 8;
-        if(just_pressed(LEFT_BUTTON))
-            nframe = 0, cx -= 8;
-        if(just_pressed(RIGHT_BUTTON))
-            nframe = 0, cx += 8;
+        if(just_pressed(UP_BUTTON   )) cy -= 8;
+        if(just_pressed(DOWN_BUTTON )) cy += 8;
+        if(just_pressed(LEFT_BUTTON )) cx -= 8;
+        if(just_pressed(RIGHT_BUTTON)) cx += 8;
         cy &= 56;
         cx &= 56;
         if(just_pressed(A_BUTTON))
@@ -439,7 +435,7 @@ void loop() {
                     tb = s.x;
                     ch2k::move mv = valid_move(ta, tb);
                     if(mv.is_promotion())
-                        tc = 3, state = STATE_HUMAN_PROMOTION;
+                        tc = 3, rcx = 40, state = STATE_HUMAN_PROMOTION;
                     else if(mv != ch2k::move::NO_MOVE)
                         send_move(mv);
                 }
@@ -562,6 +558,7 @@ void loop() {
             else
                 state = STATE_SAVE;
         }
+        break;
     case STATE_EXIT_CONFIRM:
         if(just_pressed(UP_BUTTON) || just_pressed(DOWN_BUTTON))
             ta = !ta;
@@ -635,17 +632,21 @@ ISR(TIMER3_COMPA_vect)
             uint8_t r = (ta >> 4) * 8;
             uint8_t c = (ta & 7) * 8;
             if(rotated) r = 56 - r, c = 56 - c;
-            render_cursor(r, c);
+            render_solid_cursor(r, c);
         }
-        if(!(nframe & 0x08))
-            render_cursor(cy, cx);
+        render_cursor(rcy, rcx);
+        rcx = rcx == cx + 1 ? cx : (cx + rcx + 1) / 2;
+        rcy = rcy == cy + 1 ? cy : (cy + rcy + 1) / 2;
         paint_left_half(true);
         break;
     case STATE_HUMAN_PROMOTION:
         render_board();
         render_promotion_menu();
-        if(!(nframe & 0x08))
-            render_cursor(24, tc * 8 + 16);
+        {
+            uint8_t x = tc * 8 + 16;
+            rcx = rcx == x + 1 ? x : (x + rcx + 1) / 2;
+            render_cursor(24, rcx);
+        }
         paint_left_half(true);
         break;
     case STATE_ANIM:
