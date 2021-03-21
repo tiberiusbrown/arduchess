@@ -42,13 +42,13 @@ static int compete(std::string const& fen, bool new_is_white)
         auto status = g_new.check_status();
         if(status == ch2k::game::STATUS_MATED)
         {
-            bool white_lost = g_new.c_.is_white();
+            bool white_lost = g_new.gd.c_.is_white();
             return white_lost == new_is_white ? -1 : +1;
         }
         if(status > ch2k::game::STATUS_CHECK) return 0;
 
         // continue making moves
-        bool whites_turn = g_new.c_.is_white();
+        bool whites_turn = g_new.gd.c_.is_white();
         if(whites_turn == new_is_white)
         {
             g_new.iterative_deepening();

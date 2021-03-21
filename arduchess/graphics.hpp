@@ -177,7 +177,7 @@ static void render_title_text()
 {
   uint8_t const* msg = (uint8_t const*)pgm_read_word(&MSGS_TITLE[ta]);
   uint8_t w = small_text_width_prog(msg, 255);
-  draw_small_text_prog(msg, 255, 20, 20 - (w / 2));
+  draw_small_text_prog(msg, 255, 20, 21 - (w / 2));
 }
 
 static void draw_pretty_box(uint8_t y1, uint8_t x1, uint8_t y2, uint8_t x2)

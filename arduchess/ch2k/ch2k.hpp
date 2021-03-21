@@ -1593,6 +1593,24 @@ u8 game::check_draw_repetition()
 
 bool game::check_draw_material()
 {
+    if(pval(piece_color::W) == 3 && pval(piece_color::B) == 3)
+    {
+        // KBKB with same color bishops is draw
+        piece_index ia = piece_index::NOTHING;
+        piece_index ib = piece_index::NOTHING;
+        // any slider must be a bishop
+        for(auto i : sliders(piece_color::W))
+            if(!index_to_square(i).is_nowhere())
+                i = ia;
+        for(auto i : sliders(piece_color::B))
+            if(!index_to_square(i).is_nowhere())
+                i = ib;
+        if(ia.is_nothing() || ib.is_nothing()) return true;
+        // both bishops: check same color square
+        return
+            index_to_square(ia).square_color() ==
+            index_to_square(ib).square_color();
+    }
     return
         check_draw_material_side(piece_color::W) ||
         check_draw_material_side(piece_color::B);
@@ -1604,14 +1622,17 @@ bool game::check_draw_material_side(piece_color c)
     u8 const pb = pval(c.opposite());
     if(pb == 0)
     {
+        // KK
         if(pa == 0) return true;
         for(auto i : pawns(c))
             if(!index_to_square(i).is_nowhere())
                 return false;
+        // KNK or KBK
         if(pa < 5) return true;
         if(pa == 6)
         {
-            // KNNK
+            // KNNK is not draw by material (using FIDE rules)
+#if 0
             bool one_piece = false;
             for(auto i : knights(c))
             {
@@ -1619,8 +1640,17 @@ bool game::check_draw_material_side(piece_color c)
                 if(one_piece) return true;
                 one_piece = true;
             }
+#endif
+            // KBBK with same color bishops is draw
+            u8 square_color = 0xff;
+            for(auto i : sliders(c))
+            {
+                if(index_to_square(i).is_nowhere()) continue;
+                u8 sc = index_to_square(i).square_color();
+                if(sc == square_color) return true;
+                square_color = sc;
+            }
         }
-        // TODO: KBBK with same color bishops
     }
     return false;
 }
