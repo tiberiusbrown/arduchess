@@ -19,6 +19,7 @@ enum
   SF_P, SF_I, SF_O, SF_V, SF_U, SF_G, SF_F,
   
   SF_COLON, SF_QUESTION, SF_SPACE, SF_SPACE3, SF_CHECKMARK,
+  SF_PERCENT
 };
 
 static uint8_t const MSG_MATE[] PROGMEM =
@@ -108,19 +109,27 @@ static uint8_t const MSG_OVERWRITE_SAVE[] PROGMEM =
 static uint8_t const MSG_CANCEL[] PROGMEM =
 { SF_C, SF_A, SF_N, SF_C, SF_E, SF_L };
 
-static uint8_t const MSG_C_STANDARD[] PROGMEM =
-{ SF_S, SF_T, SF_A, SF_N, SF_D, SF_A, SF_R, SF_D, SF_NULL };
-static uint8_t const MSG_C_CONFIDENT[] PROGMEM =
-{ SF_C, SF_O, SF_N, SF_F, SF_I, SF_D, SF_E, SF_N, SF_T, SF_NULL };
-static uint8_t const MSG_C_ARROGANT[] PROGMEM =
-{ SF_A, SF_R, SF_R, SF_O, SF_G, SF_A, SF_N, SF_T, SF_NULL };
+static uint8_t const MSG_BLUNDER[] PROGMEM =
+{ SF_B, SF_L, SF_U, SF_N, SF_D, SF_E, SF_R, SF_COLON };
 
-static uint8_t const * const MSGS_CONTEMPT[] PROGMEM =
+static uint8_t const MSG_BLUNDER_0[] PROGMEM =
+{ SF_N, SF_O, SF_N, SF_E, SF_NULL };
+static uint8_t const MSG_BLUNDER_1[] PROGMEM =
+{ SF_1, SF_0, SF_PERCENT, SF_NULL };
+static uint8_t const MSG_BLUNDER_2[] PROGMEM =
+{ SF_2, SF_5, SF_PERCENT, SF_NULL };
+static uint8_t const MSG_BLUNDER_3[] PROGMEM =
+{ SF_5, SF_0, SF_PERCENT, SF_NULL };
+static uint8_t const MSG_BLUNDER_4[] PROGMEM =
+{ SF_7, SF_5, SF_PERCENT, SF_NULL };
+
+static uint8_t const* const MSGS_BLUNDER[] PROGMEM =
 {
-    MSG_C_STANDARD, MSG_C_CONFIDENT, MSG_C_ARROGANT,
+    MSG_BLUNDER_0, MSG_BLUNDER_1, MSG_BLUNDER_2,
+    MSG_BLUNDER_3, MSG_BLUNDER_4,
 };
-static constexpr uint8_t const NUM_MSGS_CONTEMPT =
-  sizeof(MSGS_CONTEMPT) / sizeof(MSGS_CONTEMPT[0]);
+static constexpr uint8_t const NUM_MSGS_BLUNDER =
+  sizeof(MSGS_BLUNDER) / sizeof(MSGS_BLUNDER[0]);
   
 static uint8_t const MSG_EXIT_CONFIRM1[] PROGMEM =
 { SF_L, SF_E, SF_A, SF_V, SF_E, SF_SPACE, SF_T, SF_O };
@@ -191,6 +200,7 @@ static uint8_t const SMALL_FONT[] PROGMEM =
   2, 0x00, 0x00,                   // space
   3, 0x00, 0x00, 0x00,             // space3 (for aligning numbers)
   4, 0x04, 0x08, 0x04, 0x02,       // checkmark
+  3, 0x19, 0x04, 0x13,             // percent
 };
 
 static uint8_t small_char_width(uint8_t c)

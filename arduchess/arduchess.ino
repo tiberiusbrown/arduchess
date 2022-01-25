@@ -9,6 +9,10 @@
 #include "graphics.hpp"
 #include "save.hpp"
 
+#define STACK_CANARY_VAL 0x77
+extern char* __bss_end;
+extern uint8_t __stack;
+
 static void update_board_cache()
 {
     for(uint8_t r = 0; r < 8; ++r)
@@ -28,8 +32,8 @@ static void update_game_info()
 
 static void update_game_state()
 {
-    static uint8_t const CONTEMPT_VALS[NUM_MSGS_CONTEMPT] PROGMEM =
-    { 0, 16, 64 };
+    //static uint8_t const CONTEMPT_VALS[NUM_MSGS_BLUNDER] PROGMEM =
+    //{ 0, 16, 32, 48 };
     update_game_info();
     if(game_status > ch2k::game::STATUS_CHECK)
         state = STATE_GAME_OVER;
@@ -39,7 +43,7 @@ static void update_game_state()
             rotated = !turn;
         g.max_depth_ = 8;
         g.max_nodes_ = uint16_t(1) << (ailevel[turn]*2 + 7);
-        g.contempt_ = pgm_read_byte(&CONTEMPT_VALS[aicontempt[turn]]);
+        //g.contempt_ = pgm_read_byte(&CONTEMPT_VALS[aiblunder[turn]]);
         state = STATE_AI_START;
     }
     else
@@ -134,14 +138,18 @@ void setup() {
         Arduboy2Core::digitalWriteRGB(RED_LED, RGB_ON);
         for(;;);
     }
+
+    uint8_t *p = (uint8_t *)&__bss_end;  
+    while(p <= SP)
+      *p++ = STACK_CANARY_VAL;
   
     init_saves();
 
     state = STATE_TITLE_START;
 
     TCCR3A = 0;
-    TCCR3B = _BV(WGM32) | _BV(CS32); // CTC mode, prescaler /256
-    OCR3A = 1000; // ~62 Hz
+    TCCR3B = _BV(WGM32) | _BV(CS32) | _BV(CS30); // CTC mode, prescaler /1024
+    OCR3A = 500; // ~31 Hz
     bitWrite(TIMSK3, OCIE3A, 1);
 }
 
@@ -214,9 +222,9 @@ static void send_move(ch2k::move mv)
     state = STATE_ANIM;
 }
 
-static void undo_single_ply()
+static uint8_t undo_single_ply()
 {
-    if(g.gd.ply_ == 0 || undohist_num == 0) return;
+    if(g.gd.ply_ == 0 || undohist_num == 0) return 0;
 
     ch2k::move m = g.get_rep_move(0);
     ch2k::piece_index icap;
@@ -268,12 +276,14 @@ static void undo_single_ply()
     }
     b[to.row()][to.col()] = pcap;
     nframe = 0;
+    return 1;
 }
 
 static void undo_move()
 {
-    undo_single_ply();
-    if(ailevel[turn] == 0 && ailevel[!turn] > 0)
+    if(!undo_single_ply())
+        return;
+    else if(ailevel[turn] == 0 && ailevel[!turn] > 0)
         state = STATE_ANIM_UNDO2;
     else
         state = STATE_ANIM_UNDO;
@@ -286,7 +296,7 @@ static void new_game_cycle_option(bool reverse)
     uint8_t* t;
     uint8_t i = (ta >> 1) - 1;
     if(ta & 1)
-        n = NUM_MSGS_CONTEMPT, t = &aicontempt[i];
+        n = NUM_MSGS_BLUNDER, t = &aiblunder[i];
     else
         n = NUM_MSGS_PLAYER, t = &ailevel[i];
     if( reverse && --*t >= n) *t = n - 1;
@@ -460,7 +470,21 @@ void loop() {
         if(g.stop_)
             state = STATE_GAME_PAUSED_START;
         else if(g.best_ != ch2k::move::NO_MOVE)
-            send_move(g.best_);
+        {
+          // check for blunder
+          static uint8_t const BLUNDER_VALS[NUM_MSGS_BLUNDER] PROGMEM =
+          { 0, 26, 64, 128, 192 };
+          uint8_t bt = CH2K_RAND();
+          ch2k::move aimove = g.best_;
+          if(bt < pgm_read_byte(&BLUNDER_VALS[aiblunder[turn]]))
+          {
+            uint8_t n = g.gen_moves(&g.mvs_[0]);
+            bt = CH2K_RAND();
+            while(bt >= n) bt -= n;
+            aimove = g.mvs_[bt];
+          }
+          send_move(aimove);
+        }
         else
             state = STATE_GAME_OVER;
         break;
@@ -670,13 +694,13 @@ ISR(TIMER3_COMPA_vect)
             render_game_info();
             paint_right_half(true);
         }
-        if(nframe == 31)
+        if(nframe == 15)
             update_board_cache();
         render_board();
-        if(nframe < 31)
+        if(nframe < 15)
             render_anim();
         paint_left_half(true);
-        if(nframe == 31)
+        if(nframe == 15)
         {
             if(state == STATE_ANIM)
                 update_game_state_after_move();

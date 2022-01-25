@@ -24,8 +24,8 @@ static uint8_t const PIECE_IMGS[][7] PROGMEM =
 
 static uint8_t const SMOOTHERSTEP[32] PROGMEM =
 {
-  0, 0, 0, 0, 1, 2, 3, 5, 7, 10, 12, 16, 19, 22, 26, 30, 34,
-  38, 42, 45, 48, 52, 54, 57, 59, 61, 62, 63, 64, 64, 64, 64
+   0,  0,  1,  3,  7, 12, 19, 26,
+  34, 42, 48, 54, 59, 62, 64, 64,
 };
 
 const uint8_t* get_piece_img(ch2k::piece pc)
@@ -127,7 +127,7 @@ static void render_board()
 // render animated move
 static void render_anim()
 {
-  uint8_t x = nframe & 0x1f;
+  uint8_t x = nframe & 0xf;
   uint8_t y;
   uint8_t ax = (ta & 7) * 8, bx = (tb & 7) * 8;
   uint8_t ay = (ta >> 4) * 8, by = (tb >> 4) * 8;
@@ -158,7 +158,7 @@ static void render_cursor_ex(uint8_t y, uint8_t x, bool solid)
     {
         uint8_t yp = y + pgm_read_byte(&CURSOR_P[i]);
         uint8_t xp = x + pgm_read_byte(&CURSOR_P[(i + 8) & 0x1f]);
-        if(yp < 63 && xp < 63 && (solid || ((i + nframe/2) & 4)))
+        if(yp < 63 && xp < 63 && (solid || ((i + nframe) & 4)))
             draw_pixel(yp, xp);
     }
 }
@@ -377,13 +377,16 @@ static void render_new_game_menu()
         draw_small_text_prog(
             (uint8_t const*)pgm_read_word(&MSGS_PLAYER[ailevel[i]]),
             255, 34 + j, 34);
-        uint8_t const* ct = (uint8_t const*)pgm_read_word(&MSGS_CONTEMPT[aicontempt[i]]);
-        uint8_t cw = small_text_width_prog(ct, 255);
-        draw_small_text_prog(ct, 255, 42 + j, 60 - cw);
+        //uint8_t const* ct = (uint8_t const*)pgm_read_word(&MSGS_CONTEMPT[aiblunder[i]]);
+        //uint8_t cw = small_text_width_prog(ct, 255);
+        //draw_small_text_prog(ct, 255, 42 + j, 60 - cw);
+        draw_small_text_prog(MSG_BLUNDER, 8, 42 + j, 7);
+        uint8_t const* ct = (uint8_t const*)pgm_read_word(&MSGS_BLUNDER[aiblunder[i]]);
+        draw_small_text_prog(ct, 255, 42 + j, 42);
         if(ailevel[i] == 0)
         {
             uint8_t* b = &buf[(i * 2 + 5) * 64];
-            for(uint8_t k = 22; k < 61; ++k)
+            for(uint8_t k = 7; k < 61; ++k)
                 b[k] &= 0x55;
         }
     }
@@ -391,7 +394,7 @@ static void render_new_game_menu()
     uint8_t x1 = 33, x2 = 61;
     if(ta == 0) x1 = 2, x2 = 19;
     if(ta == 1) x1 = 2, x2 = 45;
-    if(ta == 3 || ta == 5) x1 = 21;
+    if(ta == 3 || ta == 5) x1 = 41;
     for(uint8_t i = x1; i < x2; ++i)
         b[i] ^= 0xfe;
 }

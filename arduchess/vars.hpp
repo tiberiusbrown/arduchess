@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stdint.h"
+#include <stdint.h>
 #include <Arduboy2.h>
 
 #define CH2K_ARDUINO
@@ -44,7 +44,7 @@ struct save_file_grouped_data
 {
   uint8_t aihappy[2];
   uint8_t ailevel[2];
-  uint8_t aicontempt[2];
+  uint8_t aiblunder[2];
   undohist_data undohist[UNDOHIST_SIZE];
   uint8_t sanhist[SANHIST_SIZE];
   uint8_t undohist_num;
@@ -59,7 +59,7 @@ struct save_file_data
 
 static constexpr auto& aihappy      = dd.aihappy;
 static constexpr auto& ailevel      = dd.ailevel;
-static constexpr auto& aicontempt   = dd.aicontempt;
+static constexpr auto& aiblunder    = dd.aiblunder;
 static constexpr auto& undohist     = dd.undohist;
 static constexpr auto& sanhist      = dd.sanhist;
 static constexpr auto& undohist_num = dd.undohist_num;
