@@ -22,7 +22,7 @@ static uint8_t const PIECE_IMGS[][7] PROGMEM =
   { 0x44, 0x68, 0x5a, 0x4f, 0x5a, 0x68, 0x44 }, // black king  
 };
 
-static uint8_t const SMOOTHERSTEP[32] PROGMEM =
+static uint8_t const SMOOTHERSTEP[16] PROGMEM =
 {
    0,  0,  1,  3,  7, 12, 19, 26,
   34, 42, 48, 54, 59, 62, 64, 64,
@@ -146,10 +146,14 @@ static void render_anim()
 
 static uint8_t const CURSOR_P[32] PROGMEM =
 {
-    0-1, 0-1, 0-1, 0-1, 0-1, 0-1, 0-1, 0-1,
-    0-1, 1-1, 2-1, 3-1, 4-1, 5-1, 6-1, 7-1,
-    8-1, 8-1, 8-1, 8-1, 8-1, 8-1, 8-1, 8-1,
-    8-1, 7-1, 6-1, 5-1, 4-1, 3-1, 2-1, 1-1,
+    uint8_t(0-1), uint8_t(0-1), uint8_t(0-1), uint8_t(0-1),
+    uint8_t(0-1), uint8_t(0-1), uint8_t(0-1), uint8_t(0-1),
+    uint8_t(0-1), uint8_t(1-1), uint8_t(2-1), uint8_t(3-1),
+    uint8_t(4-1), uint8_t(5-1), uint8_t(6-1), uint8_t(7-1),
+    uint8_t(8-1), uint8_t(8-1), uint8_t(8-1), uint8_t(8-1),
+    uint8_t(8-1), uint8_t(8-1), uint8_t(8-1), uint8_t(8-1),
+    uint8_t(8-1), uint8_t(7-1), uint8_t(6-1), uint8_t(5-1),
+    uint8_t(4-1), uint8_t(3-1), uint8_t(2-1), uint8_t(1-1),
 };
 
 static void render_cursor_ex(uint8_t y, uint8_t x, bool solid)

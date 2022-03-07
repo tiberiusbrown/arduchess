@@ -9,6 +9,7 @@
 #include "graphics.hpp"
 #include "save.hpp"
 
+#define DEBUG_STACK 0
 #define STACK_CANARY_VAL 0x77
 extern char* __bss_end;
 extern uint8_t __stack;
@@ -139,9 +140,11 @@ void setup() {
         for(;;);
     }
 
+#if DEBUG_STACK
     uint8_t *p = (uint8_t *)&__bss_end;  
     while(p <= SP)
       *p++ = STACK_CANARY_VAL;
+#endif
   
     init_saves();
 
