@@ -45,6 +45,7 @@ static void process_command(std::string const& cmd)
     }
     else if(startswith(cmd, "position"))
     {
+        memset(&g, 0, sizeof(g));
         if(contains(cmd, "startpos"))
             g.new_game();
         else if(contains(cmd, "fen "))
@@ -88,7 +89,7 @@ static void process_command(std::string const& cmd)
 
 int main()
 {
-    srand(0x4321);
+    srand((unsigned)time(0));
     g.new_game();
     for(;;)
     {
