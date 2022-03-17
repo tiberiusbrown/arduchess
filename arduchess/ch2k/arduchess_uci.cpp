@@ -50,6 +50,8 @@ static void process_command(std::string const& cmd)
             g.new_game();
         else if(contains(cmd, "fen "))
             g.load_fen(cmd.c_str() + cmd.find("fen ", 0) + 4);
+        else
+            exit(-3);
         if(contains(cmd, "moves "))
         {
             std::stringstream moves_ss(cmd.substr(cmd.find("moves ") + 6));
