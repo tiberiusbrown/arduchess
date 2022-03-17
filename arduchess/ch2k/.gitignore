@@ -1,5 +1,4 @@
 *.epd
 *.pgn
 pgnlib/*
-gen_opening_book.cpp
 ch2k_old.hpp
