@@ -8,11 +8,11 @@ target_include_directories(pgnlib PUBLIC pgnlib)
 
 add_executable(perft perft.cpp ch2k.hpp)
 
-add_executable(compete compete.cpp ch2k.hpp)
+#add_executable(compete compete.cpp ch2k.hpp)
+#target_compile_definitions(compete PUBLIC
+#    -DPOSFILE="${CMAKE_CURRENT_SOURCE_DIR}/starting_pos.epd")
 
 add_executable(test_opening_book test_opening_book.cpp ch2k.hpp)
-target_compile_definitions(compete PUBLIC
-    -DPOSFILE="${CMAKE_CURRENT_SOURCE_DIR}/starting_pos.epd")
 
 add_executable(gen_starting_pos gen_starting_pos.cpp ch2k.hpp)
 target_compile_definitions(gen_starting_pos PUBLIC

@@ -1,6 +1,7 @@
 #include <fstream>
 #include <PGNGameCollection.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <map>
 #include <vector>
@@ -15,6 +16,12 @@
 //#define MAX_DEPTH 2
 //#define MIN_COUNT 400
 //#define MIN_CHILDREN 1
+
+#ifdef MSC_VER
+#define ERROR() __debugbreak();
+#else
+#define ERROR() exit(-1);
+#endif
 
 struct mnode
 {
@@ -52,7 +59,7 @@ static void parse_san(ch2k::game& g, mnode& n, int depth)
 {
     int i, nmvs = g.gen_moves(&g.mvs_[0]);
     if(nmvs > 64)
-        __debugbreak();
+	ERROR();
     for(i = 0; i < nmvs; ++i)
     {
         ch2k::move m = g.mvs_[i];
@@ -74,7 +81,7 @@ static void parse_san(ch2k::game& g, mnode& n, int depth)
         break;
     }
     if(i >= nmvs)
-        __debugbreak();
+	ERROR();
     if(depth >= 12) return;
     g.do_move(n.mv);
     for(auto& kv : n.children)

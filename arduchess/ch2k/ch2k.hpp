@@ -625,6 +625,8 @@ static constexpr u8 const DELTA_CAPTS[0x99 + 1 + 0x77] PROGMEM =
     2,
 };
 
+static constexpr char UCI_CHARS[8] = { 'x', 'p', 'p', 'n', 'b', 'r', 'q', 'k' };
+
 // piece type
 struct piece_type
 {
@@ -653,9 +655,6 @@ struct piece_type
     constexpr bool operator==(piece_type t) const { return x == t.x; }
     constexpr bool operator!=(piece_type t) const { return x != t.x; }
 
-private:
-    static constexpr char UCI[8] = { 'x', 'p', 'p', 'n', 'b', 'r', 'q', 'k' };
-public:
     inline bool can_cap_delta(square_delta d) const
     {
         return (pgm_read_byte(&CAPTS[x]) & pgm_read_byte(&DELTA_CAPTS[0x99 + (s8)d.x])) != 0;
@@ -672,7 +671,7 @@ public:
     {
         return (CAPTS[x] & C_ORTH) != 0;
     }
-    constexpr char uci_char() const { return UCI[x]; }
+    constexpr char uci_char() const { return UCI_CHARS[x]; }
 };
 
 constexpr piece_type const piece_type::WPAWN  { piece_type::WP_ };

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <cmath>
+#include <cstring>
 
 struct texel_test
 {
