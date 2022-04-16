@@ -2,8 +2,6 @@
 
 Play chess on the Arduboy.
 
-This fork allows rendering the game on a homemade Arduboy with an SH1106 OLED display.
-
 <img src="/img/ScreenRecording.gif" width="256" height="128">
 
 Features:
