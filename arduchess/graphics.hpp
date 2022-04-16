@@ -496,36 +496,7 @@ static void clear_buf()
   for(auto& i : buf) i = 0;
 }
 
-static void paint_half(uint8_t const* b, bool clear)
-{
-  uint16_t count;
-  // this code is adapted from the Arduboy2 library
-  // which is licensed under BSD-3
-  // the only modification is to adjust the loop count
-  // because ArduChess buffers 64x64 half-screens to save RAM
-  asm volatile (
-    "   ldi   %A[count], %[len_lsb]               \n\t" //for (len = WIDTH * HEIGHT / 8)
-    "   ldi   %B[count], %[len_msb]               \n\t"
-    "1: ld    __tmp_reg__, %a[ptr]      ;2        \n\t" //tmp = *(image)
-    "   out   %[spdr], __tmp_reg__      ;1        \n\t" //SPDR = tmp
-    "   cpse  %[clear], __zero_reg__    ;1/2      \n\t" //if (clear) tmp = 0;
-    "   mov   __tmp_reg__, __zero_reg__ ;1        \n\t"
-    "2: sbiw  %A[count], 1              ;2        \n\t" //len --
-    "   sbrc  %A[count], 0              ;1/2      \n\t" //loop twice for cheap delay
-    "   rjmp  2b                        ;2        \n\t"
-    "   st    %a[ptr]+, __tmp_reg__     ;2        \n\t" //*(image++) = tmp
-    "   brne  1b                        ;1/2 :18  \n\t" //len > 0
-    "   in    __tmp_reg__, %[spsr]                \n\t" //read SPSR to clear SPIF
-    : [ptr]     "+&e" (b),
-      [count]   "=&w" (count)
-    : [spdr]    "I"   (_SFR_IO_ADDR(SPDR)),
-      [spsr]    "I"   (_SFR_IO_ADDR(SPSR)),
-      [len_msb] "M"   (64 * (64 / 8 * 2) >> 8),   // 8: pixels per byte
-      [len_lsb] "M"   (64 * (64 / 8 * 2) & 0xFF), // 2: for delay loop multiplier
-      [clear]   "r"   (clear)
-  );
-}
-
+#ifdef OLED_SH1106
 template <uint8_t COL_ADDRESS>
 static void paint_half_sh1106(uint8_t const* b, bool clear)
 {
@@ -581,10 +552,41 @@ static void paint_half_sh1106(uint8_t const* b, bool clear)
     : "r18", "r19", "r20"
   );
 }
+#else
+static void paint_half(uint8_t const* b, bool clear)
+{
+  uint16_t count;
+  // this code is adapted from the Arduboy2 library
+  // which is licensed under BSD-3
+  // the only modification is to adjust the loop count
+  // because ArduChess buffers 64x64 half-screens to save RAM
+  asm volatile (
+    "   ldi   %A[count], %[len_lsb]               \n\t" //for (len = WIDTH * HEIGHT / 8)
+    "   ldi   %B[count], %[len_msb]               \n\t"
+    "1: ld    __tmp_reg__, %a[ptr]      ;2        \n\t" //tmp = *(image)
+    "   out   %[spdr], __tmp_reg__      ;1        \n\t" //SPDR = tmp
+    "   cpse  %[clear], __zero_reg__    ;1/2      \n\t" //if (clear) tmp = 0;
+    "   mov   __tmp_reg__, __zero_reg__ ;1        \n\t"
+    "2: sbiw  %A[count], 1              ;2        \n\t" //len --
+    "   sbrc  %A[count], 0              ;1/2      \n\t" //loop twice for cheap delay
+    "   rjmp  2b                        ;2        \n\t"
+    "   st    %a[ptr]+, __tmp_reg__     ;2        \n\t" //*(image++) = tmp
+    "   brne  1b                        ;1/2 :18  \n\t" //len > 0
+    "   in    __tmp_reg__, %[spsr]                \n\t" //read SPSR to clear SPIF
+    : [ptr]     "+&e" (b),
+      [count]   "=&w" (count)
+    : [spdr]    "I"   (_SFR_IO_ADDR(SPDR)),
+      [spsr]    "I"   (_SFR_IO_ADDR(SPSR)),
+      [len_msb] "M"   (64 * (64 / 8 * 2) >> 8),   // 8: pixels per byte
+      [len_lsb] "M"   (64 * (64 / 8 * 2) & 0xFF), // 2: for delay loop multiplier
+      [clear]   "r"   (clear)
+  );
+}
+#endif
 
 static void paint_left_half(bool clear)
 {
-  #if defined(OLED_SH1106)
+  #ifdef OLED_SH1106
     paint_half_sh1106<OLED_SET_COLUMN_ADDRESS_HI>(buf, clear);
   #else
     Arduboy2Core::LCDCommandMode();
@@ -599,7 +601,7 @@ static void paint_left_half(bool clear)
 
 static void paint_right_half(bool clear)
 {
-  #if defined(OLED_SH1106)
+  #ifdef OLED_SH1106
     paint_half_sh1106<OLED_SET_COLUMN_ADDRESS_HI + 4>(buf, clear);
   #else
     Arduboy2Core::LCDCommandMode();
