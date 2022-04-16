@@ -19,7 +19,7 @@ static uint8_t const PIECE_IMGS[][7] PROGMEM =
   { 0x20, 0x4c, 0x72, 0x21, 0x72, 0x4c, 0x20 }, // black bishop
   { 0x46, 0x7c, 0x46, 0x44, 0x46, 0x7c, 0x46 }, // black rook
   { 0x43, 0x64, 0x5d, 0x46, 0x5d, 0x64, 0x43 }, // black queen
-  { 0x44, 0x68, 0x5a, 0x4f, 0x5a, 0x68, 0x44 }, // black king  
+  { 0x44, 0x68, 0x5a, 0x4f, 0x5a, 0x68, 0x44 }, // black king
 };
 
 static uint8_t const SMOOTHERSTEP[16] PROGMEM =
@@ -45,7 +45,7 @@ static void draw_pixel(uint8_t y, uint8_t x)
 static void draw_hline(uint8_t y, uint8_t x0, uint8_t x1)
 {
   uint8_t m = 1 << (y & 7);
-  uint8_t* p = buf + (uint16_t(y & 0xf8) << 3) + x0; 
+  uint8_t* p = buf + (uint16_t(y & 0xf8) << 3) + x0;
   while(x0++ <= x1)
     *p++ |= m;
 }
@@ -246,7 +246,7 @@ static void render_game_info()
 {
     render_game_info_side(ch2k::piece_color::W, rotated ? 0 : 50);
     render_game_info_side(ch2k::piece_color::B, rotated ? 50 : 0);
-    
+
     uint8_t y = 14 + 6 * 5;
     uint16_t move_counter = (g.gd.ply_ + 1) / 2;
     if(move_counter < MOVEHIST_SIZE)
@@ -496,6 +496,63 @@ static void clear_buf()
   for(auto& i : buf) i = 0;
 }
 
+#ifdef OLED_SH1106
+template <uint8_t COL_ADDRESS>
+static void paint_half_sh1106(uint8_t const* b, bool clear)
+{
+  // this code is adapted from the Arduboy2 library
+  // which is licensed under BSD-3
+  // the only modification is to adjust the loop count
+  // because ArduChess buffers 64x64 half-screens to save RAM
+  uint16_t count;
+
+  asm volatile (
+    "     ldi  r19, %[page_cmd]                     \n\t"
+    "1:                                             \n\t"
+    "     ldi  r18, %[col_cmd]        ;1            \n\t"
+    "     ldi  r20, 6                 ;1            \n\t"
+    "     cbi  %[dc_port], %[dc_bit]  ;2 cmd mode   \n\t"
+    "                                               \n\t"
+    "     out  %[spdr], r19           ;1            \n\t"
+    "2:   dec  r20                    ;6*3-1 : 17   \n\t"
+    "     brne 2b                                   \n\t"
+    "     out  %[spdr], r18           ;1            \n\t"
+
+    "     ldi  r18, %[width]          ;1            \n\t"
+    "     inc  r18                    ;1            \n\t"
+    "     rjmp 5f                     ;2            \n\t"
+    "4:                                             \n\t"
+    "     lpm  r20, Z                 ;3 delay      \n\t"
+    "     ld   r20, Z                 ;2            \n\t"
+    "     sbi  %[dc_port], %[dc_bit]  ;2 data mode  \n\t"
+    "     out  %[spdr], r20           ;1            \n\t"
+    "     cpse %[clear], __zero_reg__ ;1/2          \n\t"
+    "     mov  r20, __zero_reg__      ;1            \n\t"
+    "     st   Z+, r20                ;2            \n\t"
+    "5:                                             \n\t"
+    "     lpm  r20, Z                 ;3 delay      \n\t"
+    "     dec  r18                    ;1            \n\t"
+    "     brne 4b                     ;1/2          \n\t"
+    "     inc  r19                    ;1            \n\t"
+    "     cpi  r19,%[page_end]        ;1            \n\t"
+    "     brne 1b                     ;1/2          \n\t"
+    "     in    __tmp_reg__, %[spsr]                \n\t" //read SPSR to clear SPIF
+    : [ptr]      "+&z" (b)
+    :
+      [page_cmd] "M" (OLED_SET_PAGE_ADDRESS),
+      [page_end] "M" (OLED_SET_PAGE_ADDRESS + (HEIGHT / 8)),
+      [dc_port]  "I" (_SFR_IO_ADDR(DC_PORT)),
+      [dc_bit]   "I" (DC_BIT),
+      [spdr]     "I" (_SFR_IO_ADDR(SPDR)),
+      [spsr]    "I"   (_SFR_IO_ADDR(SPSR)),
+      [col_cmd]  "M" (COL_ADDRESS),
+      [offset]  "M" (4),
+      [width]    "M" (WIDTH / 2),
+      [clear]    "r" (clear)
+    : "r18", "r19", "r20"
+  );
+}
+#else
 static void paint_half(uint8_t const* b, bool clear)
 {
   uint16_t count;
@@ -525,25 +582,34 @@ static void paint_half(uint8_t const* b, bool clear)
       [clear]   "r"   (clear)
   );
 }
+#endif
 
 static void paint_left_half(bool clear)
 {
-  Arduboy2Core::LCDCommandMode();
-  Arduboy2Core::SPItransfer(0x21);
-  Arduboy2Core::SPItransfer(0);
-  Arduboy2Core::SPItransfer(63);
-  Arduboy2Core::LCDDataMode();
-  
-  paint_half(buf, clear);
+  #ifdef OLED_SH1106
+    paint_half_sh1106<OLED_SET_COLUMN_ADDRESS_HI>(buf, clear);
+  #else
+    Arduboy2Core::LCDCommandMode();
+    Arduboy2Core::SPItransfer(0x21);
+    Arduboy2Core::SPItransfer(0);
+    Arduboy2Core::SPItransfer(63);
+    Arduboy2Core::LCDDataMode();
+
+    paint_half(buf, clear);
+  #endif
 }
 
 static void paint_right_half(bool clear)
 {
-  Arduboy2Core::LCDCommandMode();
-  Arduboy2Core::SPItransfer(0x21);
-  Arduboy2Core::SPItransfer(64);
-  Arduboy2Core::SPItransfer(127);
-  Arduboy2Core::LCDDataMode();
-  
-  paint_half(buf, clear);
+  #ifdef OLED_SH1106
+    paint_half_sh1106<OLED_SET_COLUMN_ADDRESS_HI + 4>(buf, clear);
+  #else
+    Arduboy2Core::LCDCommandMode();
+    Arduboy2Core::SPItransfer(0x21);
+    Arduboy2Core::SPItransfer(64);
+    Arduboy2Core::SPItransfer(127);
+    Arduboy2Core::LCDDataMode();
+
+    paint_half(buf, clear);
+  #endif
 }
