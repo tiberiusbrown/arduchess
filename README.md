@@ -1,6 +1,6 @@
 # ArduChess
 
-Play chess on the Arduboy.
+Play chess on the Arduboy. [Try it online.](https://tiberiusbrown.github.io/arduboy_sim/player.html?file=https://raw.githubusercontent.com/tiberiusbrown/arduchess/master/arduchess/arduchess.hex)
 
 <img src="/img/ScreenRecording.gif" width="256" height="128">
 
