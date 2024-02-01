@@ -153,6 +153,7 @@ void setup() {
     TCCR3A = 0;
     TCCR3B = _BV(WGM32) | _BV(CS32) | _BV(CS30); // CTC mode, prescaler /1024
     OCR3A = 500; // ~31 Hz
+    TCNT3 = 0;
     bitWrite(TIMSK3, OCIE3A, 1);
 }
 
